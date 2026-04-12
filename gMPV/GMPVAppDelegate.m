@@ -18,12 +18,55 @@
 
   self.windowController = [[GMPVPlayerWindowController alloc] init];
   [self.windowController showWindow:nil];
+
+  NSArray *startupPaths = [self startupPlaylistEntriesFromArguments];
+  if ([startupPaths count] > 0)
+    {
+      [self.windowController addPlaylistPaths:startupPaths autoplay:YES];
+    }
 }
 
 - (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)sender
 {
   (void)sender;
   return YES;
+}
+
+- (NSArray<NSString *> *)startupPlaylistEntriesFromArguments
+{
+  NSArray *arguments = [[NSProcessInfo processInfo] arguments];
+  if ([arguments count] <= 1)
+    {
+      return [NSArray array];
+    }
+
+  NSFileManager *fileManager = [NSFileManager defaultManager];
+  NSString *cwd = [fileManager currentDirectoryPath];
+  NSMutableArray *entries = [NSMutableArray array];
+
+  NSUInteger index;
+  for (index = 1; index < [arguments count]; index++)
+    {
+      NSString *arg = [arguments objectAtIndex:index];
+      if ([arg hasPrefix:@"-"])
+        {
+          continue;
+        }
+
+      NSString *candidate = arg;
+      if (![arg hasPrefix:@"/"])
+        {
+          candidate = [cwd stringByAppendingPathComponent:arg];
+        }
+      candidate = [candidate stringByStandardizingPath];
+
+      if ([fileManager fileExistsAtPath:candidate])
+        {
+          [entries addObject:candidate];
+        }
+    }
+
+  return entries;
 }
 
 - (void)buildMainMenu

@@ -12,6 +12,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)openURLPrompt;
 - (void)openTVStream;
 - (void)toggleZoomMode;
+- (void)addPlaylistPaths:(NSArray<NSString *> *)paths autoplay:(BOOL)autoplay;
 
 @end
 

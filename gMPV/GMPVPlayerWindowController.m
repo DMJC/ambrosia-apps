@@ -3,7 +3,7 @@
 #import "GMPVMPVPlayer.h"
 #import "GMPVVideoView.h"
 
-@interface GMPVPlayerWindowController ()
+@interface GMPVPlayerWindowController () <NSTableViewDataSource, NSTableViewDelegate>
 
 @property (nonatomic, strong) GMPVVideoView *videoView;
 @property (nonatomic, strong, readwrite) GMPVMPVPlayer *player;
@@ -17,6 +17,10 @@
 @property (nonatomic, strong) NSButton *forwardButton;
 @property (nonatomic, strong) NSButton *utilityButton;
 @property (nonatomic, assign) NSInteger urlPromptResult;
+
+@property (nonatomic, strong) NSWindow *playlistWindow;
+@property (nonatomic, strong) NSTableView *playlistTableView;
+@property (nonatomic, strong) NSMutableArray<NSString *> *playlistItems;
 
 @end
 
@@ -47,7 +51,9 @@
   if (self)
     {
       [window setTitle:@"gMPV"];
+      self.playlistItems = [NSMutableArray array];
       [self buildInterface];
+      [self buildPlaylistWindow];
       _player = [[GMPVMPVPlayer alloc] initWithVideoView:_videoView];
       [self updateStatus:@"Ready"];
 
@@ -56,6 +62,8 @@
                                                    name:NSWindowDidResizeNotification
                                                  object:window];
       [self layoutInterface];
+
+      [self showPlaylistWindow];
     }
   return self;
 }
@@ -69,6 +77,7 @@
 {
   (void)notification;
   [self layoutInterface];
+  [self layoutPlaylistRelativeToPlayer];
 }
 
 - (void)buildInterface
@@ -118,6 +127,72 @@
   [self.controlsContainer addSubview:self.statusLabel];
 }
 
+- (void)buildPlaylistWindow
+{
+  NSRect playlistFrame = NSMakeRect(1470, 160, 360, 740);
+
+  NSUInteger styleMask = NSTitledWindowMask |
+                         NSClosableWindowMask |
+                         NSMiniaturizableWindowMask |
+                         NSResizableWindowMask;
+
+#ifdef NSWindowStyleMaskTitled
+  styleMask = NSWindowStyleMaskTitled |
+              NSWindowStyleMaskClosable |
+              NSWindowStyleMaskMiniaturizable |
+              NSWindowStyleMaskResizable;
+#endif
+
+  self.playlistWindow = [[NSWindow alloc] initWithContentRect:playlistFrame
+                                                     styleMask:styleMask
+                                                       backing:NSBackingStoreBuffered
+                                                         defer:NO];
+  [self.playlistWindow setTitle:@"gMPV Playlist"];
+
+  NSScrollView *scrollView = [[NSScrollView alloc] initWithFrame:[[self.playlistWindow contentView] bounds]];
+  [scrollView setHasVerticalScroller:YES];
+  [scrollView setAutoresizingMask:(NSViewWidthSizable | NSViewHeightSizable)];
+
+  self.playlistTableView = [[NSTableView alloc] initWithFrame:[scrollView bounds]];
+  [self.playlistTableView setDelegate:self];
+  [self.playlistTableView setDataSource:self];
+  [self.playlistTableView setAllowsEmptySelection:YES];
+  [self.playlistTableView setAllowsMultipleSelection:NO];
+  [self.playlistTableView setTarget:self];
+  [self.playlistTableView setDoubleAction:@selector(onPlaylistDoubleClick:)];
+
+  NSTableColumn *column = [[NSTableColumn alloc] initWithIdentifier:@"playlistItem"];
+  [column setWidth:330.0];
+  [[column headerCell] setStringValue:@"Playlist"];
+  [self.playlistTableView addTableColumn:column];
+
+  [scrollView setDocumentView:self.playlistTableView];
+  [[self.playlistWindow contentView] addSubview:scrollView];
+
+  [self layoutPlaylistRelativeToPlayer];
+}
+
+- (void)showPlaylistWindow
+{
+  [self.playlistWindow orderFront:nil];
+}
+
+- (void)layoutPlaylistRelativeToPlayer
+{
+  if (self.window == nil || self.playlistWindow == nil)
+    {
+      return;
+    }
+
+  NSRect playerFrame = [self.window frame];
+  NSRect playlistFrame = [self.playlistWindow frame];
+
+  CGFloat newX = NSMaxX(playerFrame) + 12.0;
+  CGFloat newY = NSMinY(playerFrame);
+
+  [self.playlistWindow setFrame:NSMakeRect(newX, newY, NSWidth(playlistFrame), NSHeight(playerFrame)) display:YES];
+}
+
 - (void)layoutInterface
 {
   NSView *contentView = self.window.contentView;
@@ -165,6 +240,39 @@
   return button;
 }
 
+- (void)addPlaylistPaths:(NSArray<NSString *> *)paths autoplay:(BOOL)autoplay
+{
+  if ([paths count] == 0)
+    {
+      return;
+    }
+
+  NSUInteger i;
+  for (i = 0; i < [paths count]; i++)
+    {
+      NSString *entry = [paths objectAtIndex:i];
+      if ([entry length] > 0)
+        {
+          [self.playlistItems addObject:entry];
+        }
+    }
+
+  [self.playlistTableView reloadData];
+
+  if (autoplay)
+    {
+      NSString *first = [paths objectAtIndex:0];
+      [self.player loadURLString:first];
+      [self updateStatus:[NSString stringWithFormat:@"Loaded %@", [first lastPathComponent]]];
+
+      NSInteger firstIndex = [self.playlistItems indexOfObject:first];
+      if (firstIndex != NSNotFound)
+        {
+          [self.playlistTableView selectRowIndexes:[NSIndexSet indexSetWithIndex:(NSUInteger)firstIndex] byExtendingSelection:NO];
+        }
+    }
+}
+
 - (void)openFiles
 {
   NSOpenPanel *panel = [NSOpenPanel openPanel];
@@ -186,8 +294,7 @@
             }
           [paths addObject:path];
         }
-      [self.player loadPaths:paths];
-      [self updateStatus:[NSString stringWithFormat:@"Loaded %@", [[paths objectAtIndex:0] lastPathComponent]]];
+      [self addPlaylistPaths:paths autoplay:YES];
     }
 }
 
@@ -246,8 +353,12 @@
 
   if (response == NSAlertFirstButtonReturn)
     {
-      [self.player loadURLString:[input stringValue]];
-      [self updateStatus:[NSString stringWithFormat:@"Streaming %@", [input stringValue]]];
+      NSString *value = [input stringValue];
+      if ([value length] > 0)
+        {
+          [self addPlaylistPaths:[NSArray arrayWithObject:value] autoplay:YES];
+          [self updateStatus:[NSString stringWithFormat:@"Streaming %@", value]];
+        }
     }
 }
 
@@ -268,7 +379,7 @@
 - (void)openTVStream
 {
   NSString *tvURL = @"tv://";
-  [self.player loadURLString:tvURL];
+  [self addPlaylistPaths:[NSArray arrayWithObject:tvURL] autoplay:YES];
   [self updateStatus:@"Opening TV source (tv://)"];
 }
 
@@ -330,6 +441,45 @@
   NSButton *button = (NSButton *)sender;
   NSRect frame = [button bounds];
   [menu popUpMenuPositioningItem:nil atLocation:NSMakePoint(NSMinX(frame), NSMaxY(frame)) inView:button];
+}
+
+- (void)onPlaylistDoubleClick:(id)sender
+{
+  (void)sender;
+  NSInteger row = [self.playlistTableView selectedRow];
+  if (row < 0 || row >= (NSInteger)[self.playlistItems count])
+    {
+      return;
+    }
+
+  NSString *entry = [self.playlistItems objectAtIndex:(NSUInteger)row];
+  [self.player loadURLString:entry];
+  [self updateStatus:[NSString stringWithFormat:@"Loaded %@", [entry lastPathComponent]]];
+}
+
+- (NSInteger)numberOfRowsInTableView:(NSTableView *)tableView
+{
+  (void)tableView;
+  return (NSInteger)[self.playlistItems count];
+}
+
+- (id)tableView:(NSTableView *)tableView objectValueForTableColumn:(NSTableColumn *)tableColumn row:(NSInteger)row
+{
+  (void)tableView;
+  (void)tableColumn;
+
+  if (row < 0 || row >= (NSInteger)[self.playlistItems count])
+    {
+      return @"";
+    }
+
+  NSString *entry = [self.playlistItems objectAtIndex:(NSUInteger)row];
+  NSString *displayName = [entry lastPathComponent];
+  if ([displayName length] == 0)
+    {
+      displayName = entry;
+    }
+  return displayName;
 }
 
 @end
