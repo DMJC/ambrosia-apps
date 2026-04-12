@@ -16,6 +16,7 @@
 @property (nonatomic, strong) NSButton *playPauseButton;
 @property (nonatomic, strong) NSButton *forwardButton;
 @property (nonatomic, strong) NSButton *utilityButton;
+@property (nonatomic, assign) NSInteger urlPromptResult;
 
 @end
 
@@ -124,8 +125,6 @@
 
   CGFloat controlsHeight = 42.0;
   CGFloat timelineHeight = 32.0;
-  CGFloat margin = 8.0;
-
   NSRect controlsFrame = NSMakeRect(0.0, 0.0, NSWidth(bounds), controlsHeight);
   NSRect timelineFrame = NSMakeRect(0.0, controlsHeight, NSWidth(bounds), timelineHeight);
   NSRect videoFrame = NSMakeRect(0.0,
@@ -158,7 +157,10 @@
 
 - (NSButton *)controlButtonWithTitle:(NSString *)title action:(SEL)action
 {
-  NSButton *button = [NSButton buttonWithTitle:title target:self action:action];
+  NSButton *button = [[NSButton alloc] initWithFrame:NSMakeRect(0, 0, 40, 24)];
+  [button setTitle:title];
+  [button setTarget:self];
+  [button setAction:action];
   [button setBezelStyle:NSRoundedBezelStyle];
   return button;
 }
@@ -191,22 +193,76 @@
 
 - (void)openURLPrompt
 {
-  NSAlert *alert = [[NSAlert alloc] init];
-  alert.messageText = @"Open URL / Stream";
-  alert.informativeText = @"Enter a network URL or stream location.";
+  NSPanel *panel = [[NSPanel alloc] initWithContentRect:NSMakeRect(0, 0, 420, 120)
+                                               styleMask:(NSTitledWindowMask | NSClosableWindowMask)
+                                                 backing:NSBackingStoreBuffered
+                                                   defer:NO];
+#ifdef NSWindowStyleMaskTitled
+  [panel setStyleMask:(NSWindowStyleMaskTitled | NSWindowStyleMaskClosable)];
+#endif
+  [panel setTitle:@"Open URL / Stream"];
 
-  NSTextField *input = [[NSTextField alloc] initWithFrame:NSMakeRect(0, 0, 320, 24)];
-  input.stringValue = @"https://";
-  alert.accessoryView = input;
+  NSView *content = [panel contentView];
 
-  [alert addButtonWithTitle:@"Open"];
-  [alert addButtonWithTitle:@"Cancel"];
+  NSTextField *label = [[NSTextField alloc] initWithFrame:NSMakeRect(20, 80, 380, 20)];
+  [label setBezeled:NO];
+  [label setDrawsBackground:NO];
+  [label setEditable:NO];
+  [label setSelectable:NO];
+  [label setStringValue:@"Enter a network URL or stream location:"];
 
-  if ([alert runModal] == NSAlertFirstButtonReturn)
+  NSTextField *input = [[NSTextField alloc] initWithFrame:NSMakeRect(20, 50, 380, 24)];
+  [input setStringValue:@"https://"];
+
+  NSButton *openButton = [[NSButton alloc] initWithFrame:NSMakeRect(240, 12, 80, 28)];
+  [openButton setTitle:@"Open"];
+  [openButton setButtonType:NSMomentaryPushInButton];
+  [openButton setBezelStyle:NSRoundedBezelStyle];
+  [openButton setKeyEquivalent:@"\r"];
+
+  NSButton *cancelButton = [[NSButton alloc] initWithFrame:NSMakeRect(326, 12, 80, 28)];
+  [cancelButton setTitle:@"Cancel"];
+  [cancelButton setButtonType:NSMomentaryPushInButton];
+  [cancelButton setBezelStyle:NSRoundedBezelStyle];
+  [cancelButton setKeyEquivalent:@"\e"];
+
+  [openButton setTarget:self];
+  [openButton setAction:@selector(onURLPromptOpen:)];
+
+  [cancelButton setTarget:self];
+  [cancelButton setAction:@selector(onURLPromptCancel:)];
+
+  [content addSubview:label];
+  [content addSubview:input];
+  [content addSubview:openButton];
+  [content addSubview:cancelButton];
+
+  self.urlPromptResult = NSAlertSecondButtonReturn;
+  [panel center];
+  [panel makeKeyAndOrderFront:nil];
+  [NSApp runModalForWindow:panel];
+  NSInteger response = self.urlPromptResult;
+  [panel orderOut:nil];
+
+  if (response == NSAlertFirstButtonReturn)
     {
-      [self.player loadURLString:input.stringValue];
-      [self updateStatus:[NSString stringWithFormat:@"Streaming %@", input.stringValue]];
+      [self.player loadURLString:[input stringValue]];
+      [self updateStatus:[NSString stringWithFormat:@"Streaming %@", [input stringValue]]];
     }
+}
+
+- (void)onURLPromptOpen:(id)sender
+{
+  (void)sender;
+  self.urlPromptResult = NSAlertFirstButtonReturn;
+  [NSApp stopModal];
+}
+
+- (void)onURLPromptCancel:(id)sender
+{
+  (void)sender;
+  self.urlPromptResult = NSAlertSecondButtonReturn;
+  [NSApp stopModal];
 }
 
 - (void)openTVStream
