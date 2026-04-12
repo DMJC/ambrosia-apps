@@ -138,7 +138,7 @@
 - (void)toggleFullscreen:(id)sender
 {
   (void)sender;
-  [self.windowController.window toggleFullScreen:nil];
+  [self.windowController toggleZoomMode];
 }
 
 - (void)showHelp:(id)sender

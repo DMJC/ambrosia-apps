@@ -7,9 +7,15 @@
 
 @property (nonatomic, strong) GMPVVideoView *videoView;
 @property (nonatomic, strong, readwrite) GMPVMPVPlayer *player;
+@property (nonatomic, strong) NSView *timelineContainer;
+@property (nonatomic, strong) NSView *controlsContainer;
 @property (nonatomic, strong) NSSlider *timelineSlider;
 @property (nonatomic, strong) NSSlider *volumeSlider;
 @property (nonatomic, strong) NSTextField *statusLabel;
+@property (nonatomic, strong) NSButton *rewindButton;
+@property (nonatomic, strong) NSButton *playPauseButton;
+@property (nonatomic, strong) NSButton *forwardButton;
+@property (nonatomic, strong) NSButton *utilityButton;
 
 @end
 
@@ -18,23 +24,50 @@
 - (instancetype)init
 {
   NSRect frame = NSMakeRect(160, 120, 1280, 780);
+
+  NSUInteger styleMask = NSTitledWindowMask |
+                         NSClosableWindowMask |
+                         NSMiniaturizableWindowMask |
+                         NSResizableWindowMask;
+
+#ifdef NSWindowStyleMaskTitled
+  styleMask = NSWindowStyleMaskTitled |
+              NSWindowStyleMaskClosable |
+              NSWindowStyleMaskMiniaturizable |
+              NSWindowStyleMaskResizable;
+#endif
+
   NSWindow *window = [[NSWindow alloc] initWithContentRect:frame
-                                                  styleMask:(NSWindowStyleMaskTitled |
-                                                             NSWindowStyleMaskClosable |
-                                                             NSWindowStyleMaskMiniaturizable |
-                                                             NSWindowStyleMaskResizable)
+                                                  styleMask:styleMask
                                                     backing:NSBackingStoreBuffered
                                                       defer:NO];
 
   self = [super initWithWindow:window];
   if (self)
     {
-      [window setTitle:@"gMPV"]; 
+      [window setTitle:@"gMPV"];
       [self buildInterface];
       _player = [[GMPVMPVPlayer alloc] initWithVideoView:_videoView];
-      [self updateStatus:@"Ready"]; 
+      [self updateStatus:@"Ready"];
+
+      [[NSNotificationCenter defaultCenter] addObserver:self
+                                               selector:@selector(windowDidResize:)
+                                                   name:NSWindowDidResizeNotification
+                                                 object:window];
+      [self layoutInterface];
     }
   return self;
+}
+
+- (void)dealloc
+{
+  [[NSNotificationCenter defaultCenter] removeObserver:self];
+}
+
+- (void)windowDidResize:(NSNotification *)notification
+{
+  (void)notification;
+  [self layoutInterface];
 }
 
 - (void)buildInterface
@@ -42,98 +75,91 @@
   NSView *contentView = self.window.contentView;
 
   self.videoView = [[GMPVVideoView alloc] initWithFrame:NSZeroRect];
-  self.videoView.translatesAutoresizingMaskIntoConstraints = NO;
-
-  NSView *timelineContainer = [[NSView alloc] initWithFrame:NSZeroRect];
-  timelineContainer.translatesAutoresizingMaskIntoConstraints = NO;
-
-  NSView *controlsContainer = [[NSView alloc] initWithFrame:NSZeroRect];
-  controlsContainer.translatesAutoresizingMaskIntoConstraints = NO;
+  self.timelineContainer = [[NSView alloc] initWithFrame:NSZeroRect];
+  self.controlsContainer = [[NSView alloc] initWithFrame:NSZeroRect];
 
   [contentView addSubview:self.videoView];
-  [contentView addSubview:timelineContainer];
-  [contentView addSubview:controlsContainer];
+  [contentView addSubview:self.timelineContainer];
+  [contentView addSubview:self.controlsContainer];
 
   self.timelineSlider = [[NSSlider alloc] initWithFrame:NSZeroRect];
-  self.timelineSlider.translatesAutoresizingMaskIntoConstraints = NO;
   self.timelineSlider.minValue = 0.0;
   self.timelineSlider.maxValue = 100.0;
   self.timelineSlider.target = self;
   self.timelineSlider.action = @selector(onSeek:);
-  [timelineContainer addSubview:self.timelineSlider];
+  [self.timelineContainer addSubview:self.timelineSlider];
 
-  NSButton *rewindButton = [self controlButtonWithTitle:@"◀◀" action:@selector(onRewind:)];
-  NSButton *playPauseButton = [self controlButtonWithTitle:@"▶" action:@selector(onPlayPause:)];
-  NSButton *forwardButton = [self controlButtonWithTitle:@"▶▶" action:@selector(onForward:)];
+  self.rewindButton = [self controlButtonWithTitle:@"◀◀" action:@selector(onRewind:)];
+  self.playPauseButton = [self controlButtonWithTitle:@"▶" action:@selector(onPlayPause:)];
+  self.forwardButton = [self controlButtonWithTitle:@"▶▶" action:@selector(onForward:)];
 
   self.volumeSlider = [[NSSlider alloc] initWithFrame:NSZeroRect];
-  self.volumeSlider.translatesAutoresizingMaskIntoConstraints = NO;
   self.volumeSlider.minValue = 0.0;
   self.volumeSlider.maxValue = 100.0;
   self.volumeSlider.doubleValue = 80.0;
   self.volumeSlider.target = self;
   self.volumeSlider.action = @selector(onVolume:);
 
-  NSButton *utilityButton = [self controlButtonWithTitle:@"☰" action:@selector(onUtilityMenu:)];
+  self.utilityButton = [self controlButtonWithTitle:@"☰" action:@selector(onUtilityMenu:)];
 
-  self.statusLabel = [NSTextField labelWithString:@"Ready"]; 
-  self.statusLabel.translatesAutoresizingMaskIntoConstraints = NO;
+  self.statusLabel = [[NSTextField alloc] initWithFrame:NSZeroRect];
+  [self.statusLabel setBezeled:NO];
+  [self.statusLabel setDrawsBackground:NO];
+  [self.statusLabel setEditable:NO];
+  [self.statusLabel setSelectable:NO];
+  [self.statusLabel setStringValue:@"Ready"];
 
-  [controlsContainer addSubview:rewindButton];
-  [controlsContainer addSubview:playPauseButton];
-  [controlsContainer addSubview:forwardButton];
-  [controlsContainer addSubview:self.volumeSlider];
-  [controlsContainer addSubview:utilityButton];
-  [controlsContainer addSubview:self.statusLabel];
+  [self.controlsContainer addSubview:self.rewindButton];
+  [self.controlsContainer addSubview:self.playPauseButton];
+  [self.controlsContainer addSubview:self.forwardButton];
+  [self.controlsContainer addSubview:self.volumeSlider];
+  [self.controlsContainer addSubview:self.utilityButton];
+  [self.controlsContainer addSubview:self.statusLabel];
+}
 
-  [NSLayoutConstraint activateConstraints:@[
-    [self.videoView.topAnchor constraintEqualToAnchor:contentView.topAnchor],
-    [self.videoView.leadingAnchor constraintEqualToAnchor:contentView.leadingAnchor],
-    [self.videoView.trailingAnchor constraintEqualToAnchor:contentView.trailingAnchor],
+- (void)layoutInterface
+{
+  NSView *contentView = self.window.contentView;
+  NSRect bounds = [contentView bounds];
 
-    [timelineContainer.topAnchor constraintEqualToAnchor:self.videoView.bottomAnchor],
-    [timelineContainer.leadingAnchor constraintEqualToAnchor:contentView.leadingAnchor],
-    [timelineContainer.trailingAnchor constraintEqualToAnchor:contentView.trailingAnchor],
-    [timelineContainer.heightAnchor constraintEqualToConstant:32.0],
+  CGFloat controlsHeight = 42.0;
+  CGFloat timelineHeight = 32.0;
+  CGFloat margin = 8.0;
 
-    [controlsContainer.topAnchor constraintEqualToAnchor:timelineContainer.bottomAnchor],
-    [controlsContainer.leadingAnchor constraintEqualToAnchor:contentView.leadingAnchor constant:8.0],
-    [controlsContainer.trailingAnchor constraintEqualToAnchor:contentView.trailingAnchor constant:-8.0],
-    [controlsContainer.bottomAnchor constraintEqualToAnchor:contentView.bottomAnchor constant:-8.0],
-    [controlsContainer.heightAnchor constraintEqualToConstant:42.0],
+  NSRect controlsFrame = NSMakeRect(0.0, 0.0, NSWidth(bounds), controlsHeight);
+  NSRect timelineFrame = NSMakeRect(0.0, controlsHeight, NSWidth(bounds), timelineHeight);
+  NSRect videoFrame = NSMakeRect(0.0,
+                                 controlsHeight + timelineHeight,
+                                 NSWidth(bounds),
+                                 NSHeight(bounds) - controlsHeight - timelineHeight);
 
-    [self.videoView.heightAnchor constraintGreaterThanOrEqualToConstant:360.0],
+  [self.controlsContainer setFrame:controlsFrame];
+  [self.timelineContainer setFrame:timelineFrame];
+  [self.videoView setFrame:videoFrame];
 
-    [self.timelineSlider.leadingAnchor constraintEqualToAnchor:timelineContainer.leadingAnchor constant:12.0],
-    [self.timelineSlider.trailingAnchor constraintEqualToAnchor:timelineContainer.trailingAnchor constant:-12.0],
-    [self.timelineSlider.centerYAnchor constraintEqualToAnchor:timelineContainer.centerYAnchor],
+  [self.timelineSlider setFrame:NSMakeRect(12.0,
+                                           6.0,
+                                           NSWidth(timelineFrame) - 24.0,
+                                           NSHeight(timelineFrame) - 12.0)];
 
-    [playPauseButton.centerXAnchor constraintEqualToAnchor:controlsContainer.centerXAnchor],
-    [playPauseButton.centerYAnchor constraintEqualToAnchor:controlsContainer.centerYAnchor],
+  CGFloat centerY = floor((controlsHeight - 24.0) / 2.0);
+  CGFloat centerX = NSWidth(controlsFrame) / 2.0;
 
-    [rewindButton.trailingAnchor constraintEqualToAnchor:playPauseButton.leadingAnchor constant:-8.0],
-    [rewindButton.centerYAnchor constraintEqualToAnchor:playPauseButton.centerYAnchor],
+  [self.playPauseButton setFrame:NSMakeRect(centerX - 20.0, centerY, 40.0, 24.0)];
+  [self.rewindButton setFrame:NSMakeRect(centerX - 68.0, centerY, 40.0, 24.0)];
+  [self.forwardButton setFrame:NSMakeRect(centerX + 28.0, centerY, 40.0, 24.0)];
 
-    [forwardButton.leadingAnchor constraintEqualToAnchor:playPauseButton.trailingAnchor constant:8.0],
-    [forwardButton.centerYAnchor constraintEqualToAnchor:playPauseButton.centerYAnchor],
+  [self.volumeSlider setFrame:NSMakeRect(24.0, centerY, 220.0, 24.0)];
+  [self.utilityButton setFrame:NSMakeRect(NSWidth(controlsFrame) - 52.0, centerY, 36.0, 24.0)];
+  [self.statusLabel setFrame:NSMakeRect(NSWidth(controlsFrame) - 320.0, centerY + 2.0, 250.0, 20.0)];
 
-    [self.volumeSlider.leadingAnchor constraintEqualToAnchor:controlsContainer.leadingAnchor constant:24.0],
-    [self.volumeSlider.widthAnchor constraintEqualToConstant:220.0],
-    [self.volumeSlider.centerYAnchor constraintEqualToAnchor:controlsContainer.centerYAnchor],
-
-    [utilityButton.trailingAnchor constraintEqualToAnchor:controlsContainer.trailingAnchor constant:-12.0],
-    [utilityButton.centerYAnchor constraintEqualToAnchor:controlsContainer.centerYAnchor],
-
-    [self.statusLabel.trailingAnchor constraintEqualToAnchor:utilityButton.leadingAnchor constant:-16.0],
-    [self.statusLabel.centerYAnchor constraintEqualToAnchor:controlsContainer.centerYAnchor]
-  ]];
+  [self.controlsContainer setNeedsDisplay:YES];
 }
 
 - (NSButton *)controlButtonWithTitle:(NSString *)title action:(SEL)action
 {
   NSButton *button = [NSButton buttonWithTitle:title target:self action:action];
-  button.translatesAutoresizingMaskIntoConstraints = NO;
-  button.bezelStyle = NSBezelStyleTexturedRounded;
+  [button setBezelStyle:NSRoundedBezelStyle];
   return button;
 }
 
@@ -144,15 +170,22 @@
   panel.canChooseDirectories = NO;
   panel.allowsMultipleSelection = YES;
 
-  if ([panel runModal] == NSModalResponseOK)
+  if ([panel runModal] == NSFileHandlingPanelOKButton)
     {
-      NSMutableArray<NSString *> *paths = [NSMutableArray array];
-      for (NSURL *url in panel.URLs)
+      NSMutableArray *paths = [NSMutableArray array];
+      NSEnumerator *urlEnumerator = [panel.URLs objectEnumerator];
+      NSURL *url = nil;
+      while ((url = [urlEnumerator nextObject]) != nil)
         {
-          [paths addObject:url.path ?: url.absoluteString];
+          NSString *path = [url path];
+          if (path == nil)
+            {
+              path = [url absoluteString];
+            }
+          [paths addObject:path];
         }
       [self.player loadPaths:paths];
-      [self updateStatus:[NSString stringWithFormat:@"Loaded %@", paths.firstObject.lastPathComponent ?: @"file"]];
+      [self updateStatus:[NSString stringWithFormat:@"Loaded %@", [[paths objectAtIndex:0] lastPathComponent]]];
     }
 }
 
@@ -181,6 +214,11 @@
   NSString *tvURL = @"tv://";
   [self.player loadURLString:tvURL];
   [self updateStatus:@"Opening TV source (tv://)"];
+}
+
+- (void)toggleZoomMode
+{
+  [[self window] performZoom:nil];
 }
 
 - (void)updateStatus:(NSString *)status
@@ -224,14 +262,17 @@
 {
   NSMenu *menu = [[NSMenu alloc] initWithTitle:@"Playback Options"];
 
-  [menu addItemWithTitle:@"Video" action:nil keyEquivalent:@""];
-  [menu addItemWithTitle:@"Audio" action:nil keyEquivalent:@""];
-  [menu addItemWithTitle:@"Subtitles" action:nil keyEquivalent:@""];
+  [menu addItemWithTitle:@"Video" action:NULL keyEquivalent:@""];
+  [menu addItemWithTitle:@"Audio" action:NULL keyEquivalent:@""];
+  [menu addItemWithTitle:@"Subtitles" action:NULL keyEquivalent:@""];
   [menu addItem:[NSMenuItem separatorItem]];
-  [menu addItemWithTitle:@"Fullscreen" action:@selector(toggleFullScreen:) keyEquivalent:@""];
+  [menu addItemWithTitle:@"Fullscreen" action:@selector(toggleZoomMode) keyEquivalent:@""];
+
+  NSMenuItem *lastItem = [menu itemAtIndex:[menu numberOfItems] - 1];
+  [lastItem setTarget:self];
 
   NSButton *button = (NSButton *)sender;
-  NSRect frame = button.bounds;
+  NSRect frame = [button bounds];
   [menu popUpMenuPositioningItem:nil atLocation:NSMakePoint(NSMinX(frame), NSMaxY(frame)) inView:button];
 }
 

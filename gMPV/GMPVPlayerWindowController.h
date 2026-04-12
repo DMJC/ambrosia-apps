@@ -11,6 +11,7 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)openFiles;
 - (void)openURLPrompt;
 - (void)openTVStream;
+- (void)toggleZoomMode;
 
 @end
 
