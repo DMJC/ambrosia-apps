@@ -27,6 +27,7 @@
 @property (nonatomic, strong) NSWindow *playlistWindow;
 @property (nonatomic, strong) NSTableView *playlistTableView;
 @property (nonatomic, strong) NSMutableArray<NSString *> *playlistItems;
+@property (nonatomic, assign) BOOL playbackPaused;
 
 @end
 
@@ -61,6 +62,8 @@
       [self buildInterface];
       [self buildPlaylistWindow];
       _player = [[GMPVMPVPlayer alloc] initWithVideoView:_videoView];
+      self.playbackPaused = YES;
+      [self.playPauseButton setTitle:@"▶"];
       [self updateStatus:@"Ready"];
 
       [[NSNotificationCenter defaultCenter] addObserver:self
@@ -302,6 +305,42 @@
   return button;
 }
 
+
+- (void)loadEntry:(NSString *)entry autoplay:(BOOL)autoplay
+{
+  if ([entry length] == 0)
+    {
+      return;
+    }
+
+  [self.player loadURLString:entry];
+  if (autoplay)
+    {
+      [self.player play];
+      self.playbackPaused = NO;
+      [self.playPauseButton setTitle:@"⏸"];
+    }
+  else
+    {
+      [self.player pause];
+      self.playbackPaused = YES;
+      [self.playPauseButton setTitle:@"▶"];
+    }
+}
+
+- (void)selectAndLoadPlaylistRow:(NSInteger)row autoplay:(BOOL)autoplay
+{
+  if (row < 0 || row >= (NSInteger)[self.playlistItems count])
+    {
+      return;
+    }
+
+  NSString *entry = [self.playlistItems objectAtIndex:(NSUInteger)row];
+  [self.playlistTableView selectRowIndexes:[NSIndexSet indexSetWithIndex:(NSUInteger)row] byExtendingSelection:NO];
+  [self loadEntry:entry autoplay:autoplay];
+  [self updateStatus:[NSString stringWithFormat:@"Loaded %@", [entry lastPathComponent]]];
+}
+
 - (void)addPlaylistPaths:(NSArray<NSString *> *)paths autoplay:(BOOL)autoplay
 {
   if ([paths count] == 0)
@@ -321,7 +360,7 @@
 
   [self.playlistTableView reloadData];
 
-  if (autoplay)
+  if ([self.playlistItems count] > 0)
     {
       NSString *first = [paths objectAtIndex:0];
       [self.player setNativeWindowID:[self videoHostWindowID]];
@@ -331,8 +370,9 @@
       NSInteger firstIndex = [self.playlistItems indexOfObject:first];
       if (firstIndex != NSNotFound)
         {
-          [self.playlistTableView selectRowIndexes:[NSIndexSet indexSetWithIndex:(NSUInteger)firstIndex] byExtendingSelection:NO];
+          firstIndex = 0;
         }
+      [self selectAndLoadPlaylistRow:firstIndex autoplay:autoplay];
     }
 }
 
@@ -357,7 +397,7 @@
             }
           [paths addObject:path];
         }
-      [self addPlaylistPaths:paths autoplay:YES];
+      [self addPlaylistPaths:paths autoplay:NO];
     }
 }
 
@@ -473,7 +513,33 @@
 - (void)onPlayPause:(id)sender
 {
   (void)sender;
-  [self.player togglePlayback];
+
+  if (self.playbackPaused)
+    {
+      if (self.player.currentSource == nil || [self.player.currentSource length] == 0)
+        {
+          NSInteger row = [self.playlistTableView selectedRow];
+          if (row < 0 && [self.playlistItems count] > 0)
+            {
+              row = 0;
+            }
+          if (row >= 0)
+            {
+              [self selectAndLoadPlaylistRow:row autoplay:YES];
+              return;
+            }
+        }
+
+      [self.player play];
+      self.playbackPaused = NO;
+      [self.playPauseButton setTitle:@"⏸"];
+    }
+  else
+    {
+      [self.player pause];
+      self.playbackPaused = YES;
+      [self.playPauseButton setTitle:@"▶"];
+    }
 }
 
 - (void)onForward:(id)sender
