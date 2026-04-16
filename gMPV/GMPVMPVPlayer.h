@@ -11,6 +11,12 @@ NS_ASSUME_NONNULL_BEGIN
 
 - (instancetype)initWithVideoView:(GMPVVideoView *)videoView;
 - (void)setNativeWindowID:(int64_t)wid;
+- (void)setupRenderContextWithWaylandDisplay:(nullable void *)waylandDisplay;
+- (void)teardownRenderContext;
+- (void)renderFrameWithFramebuffer:(int)framebuffer
+                             width:(int)width
+                            height:(int)height
+                             flipY:(BOOL)flipY;
 - (void)play;
 - (void)pause;
 - (void)togglePlayback;

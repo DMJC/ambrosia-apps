@@ -7,6 +7,8 @@
 #import <GNUstepGUI/GSDisplayServer.h>
 #endif
 
+#import <objc/message.h>
+
 @interface GMPVPlayerWindowController () <NSTableViewDataSource, NSTableViewDelegate>
 
 @property (nonatomic, strong) GMPVVideoView *videoView;
@@ -62,6 +64,7 @@
       [self buildInterface];
       [self buildPlaylistWindow];
       _player = [[GMPVMPVPlayer alloc] initWithVideoView:_videoView];
+      [self.videoView bindPlayer:_player waylandDisplay:[self waylandDisplayHandle]];
       self.playbackPaused = YES;
       [self.playPauseButton setTitle:@"▶"];
       [self updateStatus:@"Ready"];
@@ -269,6 +272,19 @@
 #endif
 }
 
+- (void *)waylandDisplayHandle
+{
+#ifdef GNUSTEP
+  id server = GSCurrentServer();
+  SEL displaySel = NSSelectorFromString(@"waylandDisplay");
+  if (server != nil && [server respondsToSelector:displaySel])
+    {
+      return ((void *(*)(id, SEL))objc_msgSend)(server, displaySel);
+    }
+#endif
+  return NULL;
+}
+
 - (void)attachVideoHostPanel
 {
   if (self.videoHostPanel == nil || self.window == nil)
@@ -397,7 +413,6 @@
   if ([self.playlistItems count] > 0)
     {
       NSString *first = [paths objectAtIndex:0];
-      [self.player setNativeWindowID:[self videoHostWindowID]];
       [self.player loadURLString:first];
       [self updateStatus:[NSString stringWithFormat:@"Loaded %@", [first lastPathComponent]]];
 
@@ -493,7 +508,6 @@
       NSString *value = [input stringValue];
       if ([value length] > 0)
         {
-          [self.player setNativeWindowID:[self videoHostWindowID]];
           [self addPlaylistPaths:[NSArray arrayWithObject:value] autoplay:YES];
           [self updateStatus:[NSString stringWithFormat:@"Streaming %@", value]];
         }
@@ -617,7 +631,6 @@
     }
 
   NSString *entry = [self.playlistItems objectAtIndex:(NSUInteger)row];
-  [self.player setNativeWindowID:[self videoHostWindowID]];
   [self.player loadURLString:entry];
   [self updateStatus:[NSString stringWithFormat:@"Loaded %@", [entry lastPathComponent]]];
 }
