@@ -16,7 +16,8 @@
     NSTextField  *_titleLabel;
     NSTextField  *_artistLabel;
     NSTextField  *_timeLabel;
-    NSImageView  *_albumArtView;
+    NSTextField  *_timeLeftLabel;
+    NSBox        *_infoBox;
     BOOL          _draggingProgress;
     id<NowPlayingBarDelegate> _delegate;
 }

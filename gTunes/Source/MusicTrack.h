@@ -31,6 +31,7 @@
 @property (nonatomic, retain) NSDate        *lastPlayed;
 @property (nonatomic, assign) NSInteger      rating;
 @property (nonatomic, retain) NSImage       *albumArt;
+@property (nonatomic, retain) NSData        *artData;
 
 - (id)initWithFilePath:(NSString *)path;
 - (void)loadMetadata;          // synchronous – call off main thread

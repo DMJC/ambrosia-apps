@@ -18,11 +18,6 @@ static const CGFloat kInfoX = 316.0;
     self = [super initWithFrame:frame];
     if (!self) return nil;
 
-    // ── Album art ──
-    _albumArtView = [[NSImageView alloc] initWithFrame:NSMakeRect(4, 4, 52, 52)];
-    [_albumArtView setImageScaling:NSImageScaleProportionallyUpOrDown];
-    [self addSubview:_albumArtView];
-
     // ── Transport buttons (left side) ──
     CGFloat bw = 32, bh = 32, by = (60 - bh) / 2.0;
     CGFloat tx = 62;
@@ -76,13 +71,21 @@ static const CGFloat kInfoX = 316.0;
     [[volHigh cell] setFont:[NSFont systemFontOfSize:11]];
     [self addSubview:volHigh]; [volHigh release];
 
-    // ── Song info (centre/right — frames set properly in _layout) ──
+    // ── Info box (centre/right) — contains title, artist, progress, time ──
+    _infoBox = [[NSBox alloc] initWithFrame:NSZeroRect];
+    [_infoBox setBoxType:NSBoxPrimary];
+    [_infoBox setTitlePosition:NSNoTitle];
+    [_infoBox setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
+    [self addSubview:_infoBox];
+
+    NSView *info = [_infoBox contentView];
+
     _titleLabel = [[NSTextField alloc] initWithFrame:NSZeroRect];
     [_titleLabel setBezeled:NO]; [_titleLabel setDrawsBackground:NO];
     [_titleLabel setEditable:NO]; [_titleLabel setSelectable:NO];
     [_titleLabel setAlignment:NSTextAlignmentCenter];
     [[_titleLabel cell] setFont:[NSFont boldSystemFontOfSize:12]];
-    [self addSubview:_titleLabel];
+    [info addSubview:_titleLabel];
 
     _artistLabel = [[NSTextField alloc] initWithFrame:NSZeroRect];
     [_artistLabel setBezeled:NO]; [_artistLabel setDrawsBackground:NO];
@@ -90,19 +93,28 @@ static const CGFloat kInfoX = 316.0;
     [_artistLabel setAlignment:NSTextAlignmentCenter];
     [[_artistLabel cell] setFont:[NSFont systemFontOfSize:11]];
     [[_artistLabel cell] setTextColor:[NSColor grayColor]];
-    [self addSubview:_artistLabel];
+    [info addSubview:_artistLabel];
 
     _progressSlider = [[NSSlider alloc] initWithFrame:NSZeroRect];
     [_progressSlider setMinValue:0.0]; [_progressSlider setMaxValue:1.0];
     [_progressSlider setDoubleValue:0];
     [_progressSlider setTarget:self]; [_progressSlider setAction:@selector(_seek:)];
-    [self addSubview:_progressSlider];
+    [info addSubview:_progressSlider];
 
     _timeLabel = [[NSTextField alloc] initWithFrame:NSZeroRect];
     [_timeLabel setBezeled:NO]; [_timeLabel setDrawsBackground:NO];
     [_timeLabel setEditable:NO]; [_timeLabel setSelectable:NO];
+    [_timeLabel setAlignment:NSTextAlignmentRight];
     [[_timeLabel cell] setFont:[NSFont systemFontOfSize:10]];
-    [self addSubview:_timeLabel];
+    [info addSubview:_timeLabel];
+
+    _timeLeftLabel = [[NSTextField alloc] initWithFrame:NSZeroRect];
+    [_timeLeftLabel setBezeled:NO]; [_timeLeftLabel setDrawsBackground:NO];
+    [_timeLeftLabel setEditable:NO]; [_timeLeftLabel setSelectable:NO];
+    [_timeLeftLabel setAlignment:NSTextAlignmentLeft];
+    [[_timeLeftLabel cell] setFont:[NSFont systemFontOfSize:10]];
+    [[_timeLeftLabel cell] setTextColor:[NSColor grayColor]];
+    [info addSubview:_timeLeftLabel];
 
     // Notifications
     [[NSNotificationCenter defaultCenter] addObserver:self
@@ -130,14 +142,25 @@ static const CGFloat kInfoX = 316.0;
     CGFloat w = [self bounds].size.width;
     if (w < kInfoX + 80) return;          // too narrow to lay out
 
-    // Leave ~86px on the right for the time label.
-    CGFloat infoW = w - kInfoX - 90;
-    if (infoW < 80) infoW = 80;
+    // Place the box in the info area.
+    // Search field sits at (w - 170); leave a 10px gap before it.
+    CGFloat boxW = w - kInfoX - 230;
+    if (boxW < 80) boxW = 80;
+    [_infoBox setFrame:NSMakeRect(kInfoX, 4, boxW, 52)];
 
-    [_titleLabel    setFrame:NSMakeRect(kInfoX,              38, infoW, 18)];
-    [_artistLabel   setFrame:NSMakeRect(kInfoX,              20, infoW, 16)];
-    [_progressSlider setFrame:NSMakeRect(kInfoX,              5, infoW, 12)];
-    [_timeLabel     setFrame:NSMakeRect(kInfoX + infoW + 4,  4, 84,    14)];
+    // Lay out controls inside the box's content view coordinate space.
+    // NSBox adds ~5px border on each side; use the content view bounds.
+    NSRect inner = [[_infoBox contentView] bounds];
+    CGFloat iw   = inner.size.width;
+    CGFloat timW = 44;   // width of each time label
+    CGFloat slW  = iw - timW * 2 - 8;
+    if (slW < 40) slW = 40;
+
+    [_titleLabel     setFrame:NSMakeRect(0,            inner.size.height - 18, iw,  18)];
+    [_artistLabel    setFrame:NSMakeRect(0,            inner.size.height - 34, iw,  16)];
+    [_timeLabel      setFrame:NSMakeRect(0,            2,                      timW,14)];
+    [_progressSlider setFrame:NSMakeRect(timW + 4,     2,                      slW, 12)];
+    [_timeLeftLabel  setFrame:NSMakeRect(timW + 4 + slW + 4, 2,               timW,14)];
 }
 
 - (void)dealloc
@@ -146,7 +169,8 @@ static const CGFloat kInfoX = 316.0;
     [_prevBtn release]; [_playPauseBtn release]; [_nextBtn release];
     [_progressSlider release]; [_volumeSlider release];
     [_titleLabel release]; [_artistLabel release];
-    [_timeLabel release]; [_albumArtView release];
+    [_timeLabel release]; [_timeLeftLabel release];
+    [_infoBox release];
     [super dealloc];
 }
 
@@ -178,12 +202,12 @@ static const CGFloat kInfoX = 316.0;
 
     NSTimeInterval cur = p.currentTime;
     NSTimeInterval dur = t ? t.duration : 0;
-    [_timeLabel setStringValue:[NSString stringWithFormat:@"%lu:%02lu / %lu:%02lu",
-        (unsigned long)(cur / 60), (unsigned long)((NSUInteger)cur % 60),
-        (unsigned long)(dur / 60), (unsigned long)((NSUInteger)dur % 60)]];
+    NSTimeInterval rem = (dur > cur) ? (dur - cur) : 0;
+    [_timeLabel setStringValue:[NSString stringWithFormat:@"%lu:%02lu",
+        (unsigned long)(cur / 60), (unsigned long)((NSUInteger)cur % 60)]];
+    [_timeLeftLabel setStringValue:[NSString stringWithFormat:@"-%lu:%02lu",
+        (unsigned long)(rem / 60), (unsigned long)((NSUInteger)rem % 60)]];
 
-    if (t.albumArt) [_albumArtView setImage:t.albumArt];
-    else            [_albumArtView setImage:nil];
 }
 
 - (void)_playPause:(id)s

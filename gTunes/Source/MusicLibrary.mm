@@ -1,4 +1,5 @@
 #import "MusicLibrary.h"
+#import <AppKit/NSBitmapImageRep.h>
 
 NSString * const MusicLibraryDidChangeNotification = @"MusicLibraryDidChange";
 
@@ -27,6 +28,8 @@ static NSArray *kSupportedExtensions = nil;
         _tracks        = [[NSMutableArray alloc] init];
         _playlistDict  = [[NSMutableDictionary alloc] init];
         _playlistNames = [[NSMutableArray alloc] init];
+        _artCache      = [[NSMutableDictionary alloc] init];
+        _artImageCache = [[NSMutableDictionary alloc] init];
         _scanQueue     = dispatch_queue_create("org.gtunes.scan",
                              DISPATCH_QUEUE_SERIAL);
         [self load];
@@ -46,8 +49,50 @@ static NSArray *kSupportedExtensions = nil;
     [_tracks        release];
     [_playlistDict  release];
     [_playlistNames release];
+    [_artCache      release];
+    [_artImageCache release];
     dispatch_release(_scanQueue);
     [super dealloc];
+}
+
+// ──────────── Art deduplication ────────────
+
+// Returns a cheap hash key for art data: length + NSData hash.
+// Collisions are theoretically possible but practically negligible for album art.
+- (NSString *)_artKeyForData:(NSData *)data
+{
+    return [NSString stringWithFormat:@"%lu-%lu",
+            (unsigned long)[data length], (unsigned long)[data hash]];
+}
+
+// Replaces a track's artData and albumArt with shared (interned) instances.
+// Must be called on the main thread (no extra locking needed for the caches).
+- (void)_internArtForTrack:(MusicTrack *)track
+{
+    NSData *data = track.artData;
+    if (!data || [data length] == 0) return;
+
+    NSString *key = [self _artKeyForData:data];
+
+    NSData *sharedData = _artCache[key];
+    if (!sharedData) {
+        sharedData = data;
+        _artCache[key] = sharedData;
+    }
+
+    NSImage *sharedImage = _artImageCache[key];
+    if (!sharedImage) {
+        NSBitmapImageRep *rep = [NSBitmapImageRep imageRepWithData:sharedData];
+        if (rep) {
+            sharedImage = [[NSImage alloc] initWithSize:[rep size]];
+            [sharedImage addRepresentation:rep];
+            _artImageCache[key] = sharedImage;
+            [sharedImage release];
+        }
+    }
+
+    track.artData  = sharedData;
+    track.albumArt = sharedImage;
 }
 
 // ──────────── Scanning ────────────
@@ -79,13 +124,24 @@ static NSArray *kSupportedExtensions = nil;
                 [track release];
             }
             if ([found count] > 0) {
-                dispatch_async(dispatch_get_main_queue(), ^{
-                    @synchronized(_tracks) { [_tracks addObjectsFromArray:found]; }
-                    [[NSNotificationCenter defaultCenter]
-                        postNotificationName:MusicLibraryDidChangeNotification
-                                      object:self];
-                    [self save];
-                });
+                // Flush to main thread in batches of 1000 so the library is
+                // saved periodically during large scans rather than only at end.
+                NSUInteger batchSize = 1000;
+                for (NSUInteger i = 0; i < [found count]; i += batchSize) {
+                    NSUInteger len = MIN(batchSize, [found count] - i);
+                    NSArray *batch = [found subarrayWithRange:NSMakeRange(i, len)];
+                    dispatch_sync(dispatch_get_main_queue(), ^{
+                        for (MusicTrack *t in batch)
+                            [self _internArtForTrack:t];
+                        @synchronized(_tracks) { [_tracks addObjectsFromArray:batch]; }
+                        NSLog(@"[gTunes] scanned %lu files so far",
+                              (unsigned long)[_tracks count]);
+                        [[NSNotificationCenter defaultCenter]
+                            postNotificationName:MusicLibraryDidChangeNotification
+                                          object:self];
+                        [self save];
+                    });
+                }
             }
         }
     });
@@ -219,9 +275,17 @@ static NSArray *kSupportedExtensions = nil;
 
 - (void)save
 {
+    // Build deduplicated artwork dict: hash key -> NSData
+    NSMutableDictionary *artworkDict = [NSMutableDictionary dictionary];
     NSMutableArray *trackDicts = [NSMutableArray array];
     @synchronized(_tracks) {
         for (MusicTrack *t in _tracks) {
+            NSString *artHash = @"";
+            if (t.artData && [t.artData length] > 0) {
+                artHash = [self _artKeyForData:t.artData];
+                if (!artworkDict[artHash])
+                    artworkDict[artHash] = t.artData;
+            }
             [trackDicts addObject:@{
                 @"filePath"   : t.filePath   ?: @"",
                 @"title"      : t.title      ?: @"",
@@ -234,6 +298,7 @@ static NSArray *kSupportedExtensions = nil;
                 @"playCount"  : @(t.playCount),
                 @"rating"     : @(t.rating),
                 @"lastPlayed" : t.lastPlayed ?: [NSDate dateWithTimeIntervalSince1970:0],
+                @"artHash"    : artHash,
             }];
         }
     }
@@ -247,17 +312,26 @@ static NSArray *kSupportedExtensions = nil;
     }
 
     NSDictionary *root = @{
-        @"tracks"    : trackDicts,
-        @"playlists" : plists,
+        @"tracks"        : trackDicts,
+        @"artwork"       : artworkDict,
+        @"playlists"     : plists,
         @"playlistOrder" : _playlistNames,
     };
-    [root writeToFile:[self _savePath] atomically:YES];
+    BOOL ok = [root writeToFile:[self _savePath] atomically:YES];
+    NSLog(@"[gTunes] library saved to %@ (%lu tracks, %lu unique art) %@",
+          [self _savePath], (unsigned long)[_tracks count],
+          (unsigned long)[artworkDict count],
+          ok ? @"OK" : @"FAILED");
 }
 
 - (void)load
 {
     NSDictionary *root = [NSDictionary dictionaryWithContentsOfFile:[self _savePath]];
     if (!root) return;
+
+    // Load deduplicated artwork table (new format).
+    // Falls back gracefully if the key is absent (old format).
+    NSDictionary *artworkDict = root[@"artwork"];
 
     NSArray *trackDicts = root[@"tracks"];
     for (NSDictionary *d in trackDicts) {
@@ -274,9 +348,49 @@ static NSArray *kSupportedExtensions = nil;
         t.playCount   = [d[@"playCount"]   unsignedIntegerValue];
         t.rating      = [d[@"rating"]      integerValue];
         id lp = d[@"lastPlayed"];
-        if ([lp isKindOfClass:[NSDate class]] && [lp timeIntervalSince1970] > 0) t.lastPlayed = lp;
+        if ([lp isKindOfClass:[NSDate class]] && [lp timeIntervalSince1970] > 0)
+            t.lastPlayed = lp;
+
+        // Resolve art: new format uses artHash ref, old format has inline artData.
+        NSData *artData = nil;
+        NSString *artHash = d[@"artHash"];
+        if ([artHash isKindOfClass:[NSString class]] && [artHash length] > 0)
+            artData = artworkDict[artHash];
+        if (!artData) {
+            // Old format fallback
+            id inlineart = d[@"artData"];
+            if ([inlineart isKindOfClass:[NSData class]] && [inlineart length] > 0)
+                artData = inlineart;
+        }
+        if (artData) {
+            t.artData = artData;
+            [_artCache setObject:artData
+                          forKey:artHash ?: [self _artKeyForData:artData]];
+        }
+
         [_tracks addObject:t];
         [t release];
+    }
+
+    // Build shared NSImage instances for all interned art data.
+    for (NSString *key in _artCache) {
+        if (_artImageCache[key]) continue;
+        NSData *data = _artCache[key];
+        NSBitmapImageRep *rep = [NSBitmapImageRep imageRepWithData:data];
+        if (rep) {
+            NSImage *img = [[NSImage alloc] initWithSize:[rep size]];
+            [img addRepresentation:rep];
+            _artImageCache[key] = img;
+            [img release];
+        }
+    }
+
+    // Point every track at its shared NSImage.
+    for (MusicTrack *t in _tracks) {
+        if (!t.artData || [t.artData length] == 0) continue;
+        NSString *key = [self _artKeyForData:t.artData];
+        NSImage *img = _artImageCache[key];
+        if (img) t.albumArt = img;
     }
 
     NSArray *order = root[@"playlistOrder"];

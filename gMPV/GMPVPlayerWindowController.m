@@ -70,6 +70,10 @@
                                                selector:@selector(windowDidResize:)
                                                    name:NSWindowDidResizeNotification
                                                  object:window];
+      [[NSNotificationCenter defaultCenter] addObserver:self
+                                               selector:@selector(windowDidMove:)
+                                                   name:NSWindowDidMoveNotification
+                                                 object:window];
       [self layoutInterface];
 
       [self showPlaylistWindow];
@@ -81,6 +85,11 @@
 {
   [super showWindow:sender];
   [self attachVideoHostPanel];
+  /* Flush pending display-server events so the videoHostPanel's X11 window
+   * is fully mapped and has a valid XID before any caller asks for it via
+   * videoHostWindowID.  Without this drain the wid can arrive as 0 and mpv
+   * opens its own top-level window instead of embedding. */
+  [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
 }
 
 - (void)dealloc
@@ -92,6 +101,13 @@
 {
   (void)notification;
   [self layoutInterface];
+  [self layoutPlaylistRelativeToPlayer];
+}
+
+- (void)windowDidMove:(NSNotification *)notification
+{
+  (void)notification;
+  [self layoutVideoHostPanel];
   [self layoutPlaylistRelativeToPlayer];
 }
 
@@ -202,6 +218,24 @@
 - (void)showPlaylistWindow
 {
   [self.playlistWindow orderFront:nil];
+}
+
+- (void)togglePlaylistWindow
+{
+  if ([self.playlistWindow isVisible])
+    {
+      [self.playlistWindow orderOut:nil];
+    }
+  else
+    {
+      [self layoutPlaylistRelativeToPlayer];
+      [self.playlistWindow orderFront:nil];
+    }
+}
+
+- (BOOL)isPlaylistVisible
+{
+  return self.playlistWindow != nil && [self.playlistWindow isVisible];
 }
 
 - (void)layoutPlaylistRelativeToPlayer

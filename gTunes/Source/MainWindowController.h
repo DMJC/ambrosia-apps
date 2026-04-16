@@ -15,9 +15,11 @@
     NSSplitView                *_mainSplit;
 
     // ── Sidebar ──
+    NSView                     *_sidebarContainer;
     NSScrollView               *_sidebarScroll;
     NSOutlineView              *_sidebarOutline;
     LibrarySidebarController   *_sidebarCtrl;
+    NSImageView                *_sidebarArtView;
 
     // ── Content area (vertical split: browser | tracklist) ──
     NSSplitView                *_contentSplit;

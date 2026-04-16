@@ -1,4 +1,5 @@
 #import "MusicTrack.h"
+#import <AppKit/NSBitmapImageRep.h>
 
 #include <taglib/fileref.h>
 #include <taglib/tag.h>
@@ -30,6 +31,7 @@
 @synthesize lastPlayed  = _lastPlayed;
 @synthesize rating      = _rating;
 @synthesize albumArt    = _albumArt;
+@synthesize artData     = _artData;
 
 - (id)initWithFilePath:(NSString *)path
 {
@@ -61,6 +63,7 @@
     [_year       release];
     [_lastPlayed release];
     [_albumArt   release];
+    [_artData    release];
     [super dealloc];
 }
 
@@ -147,8 +150,13 @@ static inline NSString *tlStr(const TagLib::String &s) {
     }
 
     if (artData && [artData length] > 0) {
-        NSImage *img = [[NSImage alloc] initWithData:artData];
-        if (img) { [_albumArt release]; _albumArt = img; }
+        [_artData release]; _artData = [artData retain];
+        NSBitmapImageRep *rep = [NSBitmapImageRep imageRepWithData:artData];
+        if (rep) {
+            NSImage *img = [[NSImage alloc] initWithSize:[rep size]];
+            [img addRepresentation:rep];
+            [_albumArt release]; _albumArt = img;
+        }
     }
 }
 

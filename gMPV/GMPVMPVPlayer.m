@@ -2,6 +2,8 @@
 
 #import "GMPVVideoView.h"
 
+#include <inttypes.h>
+
 #if __has_include(<mpv/client.h>)
   #import <mpv/client.h>
   #define GMPV_HAS_LIBMPV 1
@@ -70,26 +72,21 @@
       return;
     }
 
+  /* Set video output and context options before mpv_initialize so that when
+   * setNativeWindowID: provides the wid the VO honours it.  Force the X11
+   * GPU context so mpv uses GLX/XID embedding rather than a native Wayland
+   * surface (which would ignore the GNUstep-provided XID entirely). */
   mpv_set_option_string(_mpv, "vo", "gpu");
+  mpv_set_option_string(_mpv, "gpu-context", "x11");
+  mpv_set_option_string(_mpv, "idle", "yes");
+  mpv_set_option_string(_mpv, "keep-open", "yes");
+  mpv_set_option_string(_mpv, "input-default-bindings", "no");
+  mpv_set_option_string(_mpv, "input-vo-keyboard", "no");
 
-  if (mpv_initialize(_mpv) < 0)
-    {
-      NSLog(@"Failed to initialize mpv");
-      mpv_terminate_destroy(_mpv);
-      _mpv = NULL;
-      return;
-    }
-
-  #if GMPV_HAS_OPENGL_CB
-    _openglContext = mpv_get_sub_api(_mpv, MPV_SUB_API_OPENGL_CB);
-    if (_openglContext == NULL)
-      {
-        NSLog(@"mpv OpenGL callback API unavailable");
-      }
-  #else
-    NSLog(@"mpv/opengl_cb.h not found. Building without OpenGL callback integration.");
-  #endif
-
+  /* mpv_initialize is intentionally deferred: setNativeWindowID: sets the
+   * "wid" option and then calls mpv_initialize, guaranteeing the window ID
+   * is in place before the VO is created. */
+  _initialized = NO;
   self.ready = YES;
 #else
   NSLog(@"Built without libmpv headers. Player backend is stubbed.");
@@ -100,8 +97,43 @@
 - (void)setNativeWindowID:(int64_t)wid
 {
 #if GMPV_HAS_LIBMPV
-  if (_mpv != NULL)
+  if (_mpv == NULL)
     {
+      return;
+    }
+
+  if (!_initialized)
+    {
+      /* First call: bake the window ID into the option set so the VO picks
+       * it up at creation time, then complete mpv initialisation. */
+      char widStr[32];
+      snprintf(widStr, sizeof(widStr), "%" PRId64, wid);
+      if (wid != 0)
+        {
+          mpv_set_option_string(_mpv, "wid", widStr);
+        }
+
+      if (mpv_initialize(_mpv) < 0)
+        {
+          NSLog(@"Failed to initialize mpv");
+          mpv_terminate_destroy(_mpv);
+          _mpv = NULL;
+          return;
+        }
+
+  #if GMPV_HAS_OPENGL_CB
+      _openglContext = mpv_get_sub_api(_mpv, MPV_SUB_API_OPENGL_CB);
+      if (_openglContext == NULL)
+        {
+          NSLog(@"mpv OpenGL callback API unavailable");
+        }
+  #endif
+      _initialized = YES;
+    }
+  else
+    {
+      /* Subsequent calls: update the live property (e.g. after a window
+       * resize or re-parent). */
       mpv_set_property(_mpv, "wid", MPV_FORMAT_INT64, &wid);
     }
 #else
@@ -127,7 +159,7 @@
 - (void)stop
 {
 #if GMPV_HAS_LIBMPV
-  if (_mpv != NULL)
+  if (_mpv != NULL && _initialized)
     {
       const char *cmd[] = {"stop", NULL};
       mpv_command(_mpv, cmd);
@@ -145,7 +177,7 @@
   self.currentSource = urlString;
 
 #if GMPV_HAS_LIBMPV
-  if (_mpv != NULL)
+  if (_mpv != NULL && _initialized)
     {
       const char *cmd[] = {"loadfile", [urlString UTF8String], NULL};
       mpv_command(_mpv, cmd);
@@ -169,7 +201,7 @@
 - (void)setVolume:(float)volume
 {
 #if GMPV_HAS_LIBMPV
-  if (_mpv != NULL)
+  if (_mpv != NULL && _initialized)
     {
       double v = MAX(0.0, MIN(100.0, volume));
       mpv_set_property(_mpv, "volume", MPV_FORMAT_DOUBLE, &v);
@@ -182,7 +214,7 @@
 - (void)seekToRelativeSeconds:(double)seconds
 {
 #if GMPV_HAS_LIBMPV
-  if (_mpv != NULL)
+  if (_mpv != NULL && _initialized)
     {
       double amount = seconds;
       mpv_set_property(_mpv, "time-pos", MPV_FORMAT_DOUBLE, &amount);
@@ -197,7 +229,7 @@
   _paused = pause;
 
 #if GMPV_HAS_LIBMPV
-  if (_mpv != NULL)
+  if (_mpv != NULL && _initialized)
     {
       int flag = pause ? 1 : 0;
       mpv_set_property(_mpv, "pause", MPV_FORMAT_FLAG, &flag);

@@ -9,6 +9,8 @@ extern NSString * const MusicLibraryDidChangeNotification;
     NSMutableDictionary *_playlistDict;   // name -> NSMutableArray
     NSMutableArray      *_playlistNames;
     dispatch_queue_t     _scanQueue;
+    NSMutableDictionary *_artCache;       // hash key -> NSData  (shared art bytes)
+    NSMutableDictionary *_artImageCache;  // hash key -> NSImage (shared art image)
 }
 
 + (MusicLibrary *)sharedLibrary;

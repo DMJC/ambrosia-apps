@@ -139,6 +139,10 @@
                                 action:@selector(toggleFullscreen:)
                           keyEquivalent:@"f"]];
 
+  [menu addItem:[self menuItemWithTitle:@"Show Playlist"
+                                action:@selector(togglePlaylist:)
+                          keyEquivalent:@"l"]];
+
   return menu;
 }
 
@@ -182,6 +186,22 @@
 {
   (void)sender;
   [self.windowController toggleZoomMode];
+}
+
+- (void)togglePlaylist:(id)sender
+{
+  (void)sender;
+  [self.windowController togglePlaylistWindow];
+}
+
+- (BOOL)validateMenuItem:(NSMenuItem *)menuItem
+{
+  if ([menuItem action] == @selector(togglePlaylist:))
+    {
+      BOOL visible = [self.windowController isPlaylistVisible];
+      [menuItem setTitle:visible ? @"Hide Playlist" : @"Show Playlist"];
+    }
+  return YES;
 }
 
 - (void)showHelp:(id)sender

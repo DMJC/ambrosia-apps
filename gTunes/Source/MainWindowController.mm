@@ -4,6 +4,17 @@
 #import "AudioPlayer.h"
 #import "Preferences.h"
 
+@interface StatusBarCell : NSTextFieldCell
+@end
+@implementation StatusBarCell
+- (NSRect)drawingRectForBounds:(NSRect)theRect
+{
+    NSRect r = [super drawingRectForBounds:theRect];
+    r.origin.y += 5;
+    return r;
+}
+@end
+
 @interface MainWindowController ()
 - (void)_buildMenu;
 - (void)_buildWindow;
@@ -20,6 +31,7 @@
 - (void)_rescanDefaultLibrary:(id)sender;
 - (void)_doubleClickTrack:(id)sender;
 - (void)_libraryChanged:(NSNotification *)note;
+- (void)_trackChanged:(NSNotification *)note;
 - (void)_updateStatusBar;
 // Controls
 - (void)_toggleShuffle:(id)sender;
@@ -48,6 +60,9 @@
         [[NSNotificationCenter defaultCenter] addObserver:self
             selector:@selector(_libraryChanged:)
             name:MusicLibraryDidChangeNotification object:nil];
+        [[NSNotificationCenter defaultCenter] addObserver:self
+            selector:@selector(_trackChanged:)
+            name:AudioPlayerTrackChangedNotification object:nil];
         _currentSection = [@"Music" retain];
     }
     return self;
@@ -57,6 +72,7 @@
 {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
     [_currentSection release];
+    [_sidebarArtView release]; [_sidebarContainer release];
     [_sidebarCtrl  release]; [_browserCtrl release]; [_trackCtrl release];
     [super dealloc];
 }
@@ -98,7 +114,7 @@
 
         [fileMenu addItem:[NSMenuItem separatorItem]];
 
-        NSMenuItem *rescan = [fileMenu addItemWithTitle:@"Rescan Default Music Library"
+        NSMenuItem *rescan = [fileMenu addItemWithTitle:@"Rescan Music Library"
             action:@selector(_rescanDefaultLibrary:) keyEquivalent:@"r"];
         [rescan setTarget:self];
 
@@ -290,9 +306,12 @@
 
     // Sidebar
     [self _buildSidebar];
+    static const CGFloat kArtH = 180.0;
     NSRect sideRect = NSMakeRect(0, 0, 180, splitH);
-    [_sidebarScroll setFrame:sideRect];
-    [_mainSplit addSubview:_sidebarScroll];
+    [_sidebarContainer setFrame:sideRect];
+    [_sidebarArtView   setFrame:NSMakeRect(0, 0, 180, kArtH)];
+    [_sidebarScroll    setFrame:NSMakeRect(0, kArtH, 180, splitH - kArtH)];
+    [_mainSplit addSubview:_sidebarContainer];
 
     // Content split (vertical: browser 150px | track list)
     _contentSplit = [[NSSplitView alloc]
@@ -349,6 +368,9 @@
 - (void)_buildStatusBar
 {
     _statusBar = [[NSTextField alloc] initWithFrame:NSZeroRect];
+    StatusBarCell *cell = [[StatusBarCell alloc] initTextCell:@""];
+    [_statusBar setCell:cell];
+    [cell release];
     [_statusBar setBezeled:NO];
     [_statusBar setDrawsBackground:YES];
     [_statusBar setBackgroundColor:
@@ -361,10 +383,25 @@
 
 - (void)_buildSidebar
 {
+    static const CGFloat kArtH = 180.0;
+
+    _sidebarContainer = [[NSView alloc] initWithFrame:NSZeroRect];
+    [_sidebarContainer setAutoresizingMask:NSViewHeightSizable | NSViewWidthSizable];
+
+    // Album art panel at the bottom
+    _sidebarArtView = [[NSImageView alloc]
+        initWithFrame:NSMakeRect(0, 0, 180, kArtH)];
+    [_sidebarArtView setImageScaling:NSImageScaleProportionallyUpOrDown];
+    [_sidebarArtView setAutoresizingMask:NSViewWidthSizable | NSViewMaxYMargin];
+    [_sidebarContainer addSubview:_sidebarArtView];
+
+    // Outline scroll view fills the space above the art panel
     _sidebarScroll = [[NSScrollView alloc] initWithFrame:NSZeroRect];
     [_sidebarScroll setBorderType:NSNoBorder];
     [_sidebarScroll setHasVerticalScroller:YES];
     [_sidebarScroll setAutohidesScrollers:YES];
+    [_sidebarScroll setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
+    [_sidebarContainer addSubview:_sidebarScroll];
 
     _sidebarOutline = [[NSOutlineView alloc] initWithFrame:NSZeroRect];
     NSTableColumn *col = [[NSTableColumn alloc] initWithIdentifier:@"item"];
@@ -702,6 +739,12 @@
          "• Space bar toggles Play/Pause."];
     [help addButtonWithTitle:@"OK"];
     [help runModal];
+}
+
+- (void)_trackChanged:(NSNotification *)note
+{
+    MusicTrack *t = [AudioPlayer sharedPlayer].currentTrack;
+    [_sidebarArtView setImage:t.albumArt];
 }
 
 - (void)_libraryChanged:(NSNotification *)note
