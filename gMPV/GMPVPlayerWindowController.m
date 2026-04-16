@@ -3,7 +3,11 @@
 #import "GMPVMPVPlayer.h"
 #import "GMPVVideoView.h"
 
-@interface GMPVPlayerWindowController ()
+#ifdef GNUSTEP
+#import <GNUstepGUI/GSDisplayServer.h>
+#endif
+
+@interface GMPVPlayerWindowController () <NSTableViewDataSource, NSTableViewDelegate>
 
 @property (nonatomic, strong) GMPVVideoView *videoView;
 @property (nonatomic, strong, readwrite) GMPVMPVPlayer *player;
@@ -17,6 +21,13 @@
 @property (nonatomic, strong) NSButton *forwardButton;
 @property (nonatomic, strong) NSButton *utilityButton;
 @property (nonatomic, assign) NSInteger urlPromptResult;
+
+@property (nonatomic, strong) NSPanel *videoHostPanel;
+
+@property (nonatomic, strong) NSWindow *playlistWindow;
+@property (nonatomic, strong) NSTableView *playlistTableView;
+@property (nonatomic, strong) NSMutableArray<NSString *> *playlistItems;
+@property (nonatomic, assign) BOOL playbackPaused;
 
 @end
 
@@ -47,8 +58,12 @@
   if (self)
     {
       [window setTitle:@"gMPV"];
+      self.playlistItems = [NSMutableArray array];
       [self buildInterface];
+      [self buildPlaylistWindow];
       _player = [[GMPVMPVPlayer alloc] initWithVideoView:_videoView];
+      self.playbackPaused = YES;
+      [self.playPauseButton setTitle:@"▶"];
       [self updateStatus:@"Ready"];
 
       [[NSNotificationCenter defaultCenter] addObserver:self
@@ -56,8 +71,16 @@
                                                    name:NSWindowDidResizeNotification
                                                  object:window];
       [self layoutInterface];
+
+      [self showPlaylistWindow];
     }
   return self;
+}
+
+- (void)showWindow:(id)sender
+{
+  [super showWindow:sender];
+  [self attachVideoHostPanel];
 }
 
 - (void)dealloc
@@ -69,6 +92,7 @@
 {
   (void)notification;
   [self layoutInterface];
+  [self layoutPlaylistRelativeToPlayer];
 }
 
 - (void)buildInterface
@@ -78,6 +102,18 @@
   self.videoView = [[GMPVVideoView alloc] initWithFrame:NSZeroRect];
   self.timelineContainer = [[NSView alloc] initWithFrame:NSZeroRect];
   self.controlsContainer = [[NSView alloc] initWithFrame:NSZeroRect];
+
+  NSUInteger borderlessMask = NSBorderlessWindowMask;
+#ifdef NSWindowStyleMaskBorderless
+  borderlessMask = NSWindowStyleMaskBorderless;
+#endif
+  NSPanel *hostPanel = [[NSPanel alloc] initWithContentRect:NSMakeRect(0, 0, 1, 1)
+                                                   styleMask:borderlessMask
+                                                     backing:NSBackingStoreBuffered
+                                                       defer:NO];
+  [hostPanel setOpaque:YES];
+  [hostPanel setBackgroundColor:[NSColor blackColor]];
+  self.videoHostPanel = hostPanel;
 
   [contentView addSubview:self.videoView];
   [contentView addSubview:self.timelineContainer];
@@ -118,6 +154,109 @@
   [self.controlsContainer addSubview:self.statusLabel];
 }
 
+- (void)buildPlaylistWindow
+{
+  NSRect playlistFrame = NSMakeRect(1470, 160, 360, 740);
+
+  NSUInteger styleMask = NSTitledWindowMask |
+                         NSClosableWindowMask |
+                         NSMiniaturizableWindowMask |
+                         NSResizableWindowMask;
+
+#ifdef NSWindowStyleMaskTitled
+  styleMask = NSWindowStyleMaskTitled |
+              NSWindowStyleMaskClosable |
+              NSWindowStyleMaskMiniaturizable |
+              NSWindowStyleMaskResizable;
+#endif
+
+  self.playlistWindow = [[NSWindow alloc] initWithContentRect:playlistFrame
+                                                     styleMask:styleMask
+                                                       backing:NSBackingStoreBuffered
+                                                         defer:NO];
+  [self.playlistWindow setTitle:@"gMPV Playlist"];
+
+  NSScrollView *scrollView = [[NSScrollView alloc] initWithFrame:[[self.playlistWindow contentView] bounds]];
+  [scrollView setHasVerticalScroller:YES];
+  [scrollView setAutoresizingMask:(NSViewWidthSizable | NSViewHeightSizable)];
+
+  self.playlistTableView = [[NSTableView alloc] initWithFrame:[scrollView bounds]];
+  [self.playlistTableView setDelegate:self];
+  [self.playlistTableView setDataSource:self];
+  [self.playlistTableView setAllowsEmptySelection:YES];
+  [self.playlistTableView setAllowsMultipleSelection:NO];
+  [self.playlistTableView setTarget:self];
+  [self.playlistTableView setDoubleAction:@selector(onPlaylistDoubleClick:)];
+
+  NSTableColumn *column = [[NSTableColumn alloc] initWithIdentifier:@"playlistItem"];
+  [column setWidth:330.0];
+  [[column headerCell] setStringValue:@"Playlist"];
+  [self.playlistTableView addTableColumn:column];
+
+  [scrollView setDocumentView:self.playlistTableView];
+  [[self.playlistWindow contentView] addSubview:scrollView];
+
+  [self layoutPlaylistRelativeToPlayer];
+}
+
+- (void)showPlaylistWindow
+{
+  [self.playlistWindow orderFront:nil];
+}
+
+- (void)layoutPlaylistRelativeToPlayer
+{
+  if (self.window == nil || self.playlistWindow == nil)
+    {
+      return;
+    }
+
+  NSRect playerFrame = [self.window frame];
+  NSRect playlistFrame = [self.playlistWindow frame];
+
+  CGFloat newX = NSMaxX(playerFrame) + 12.0;
+  CGFloat newY = NSMinY(playerFrame);
+
+  [self.playlistWindow setFrame:NSMakeRect(newX, newY, NSWidth(playlistFrame), NSHeight(playerFrame)) display:YES];
+}
+
+- (int64_t)videoHostWindowID
+{
+#ifdef GNUSTEP
+  if (self.videoHostPanel == nil)
+    {
+      return 0;
+    }
+  NSInteger gsWinNum = [self.videoHostPanel windowNumber];
+  void *xid = [GSCurrentServer() windowDevice:gsWinNum];
+  return (int64_t)(uintptr_t)xid;
+#else
+  return 0;
+#endif
+}
+
+- (void)attachVideoHostPanel
+{
+  if (self.videoHostPanel == nil || self.window == nil)
+    {
+      return;
+    }
+  [self layoutVideoHostPanel];
+  [[self window] addChildWindow:self.videoHostPanel ordered:NSWindowAbove];
+  [self.videoHostPanel orderFront:nil];
+}
+
+- (void)layoutVideoHostPanel
+{
+  if (self.videoHostPanel == nil || self.window == nil)
+    {
+      return;
+    }
+  NSRect videoViewRect = [self.videoView convertRect:[self.videoView bounds] toView:nil];
+  NSRect screenRect = [[self window] convertRectToScreen:videoViewRect];
+  [self.videoHostPanel setFrame:screenRect display:YES];
+}
+
 - (void)layoutInterface
 {
   NSView *contentView = self.window.contentView;
@@ -153,6 +292,7 @@
   [self.statusLabel setFrame:NSMakeRect(NSWidth(controlsFrame) - 320.0, centerY + 2.0, 250.0, 20.0)];
 
   [self.controlsContainer setNeedsDisplay:YES];
+  [self layoutVideoHostPanel];
 }
 
 - (NSButton *)controlButtonWithTitle:(NSString *)title action:(SEL)action
@@ -163,6 +303,77 @@
   [button setAction:action];
   [button setBezelStyle:NSRoundedBezelStyle];
   return button;
+}
+
+
+- (void)loadEntry:(NSString *)entry autoplay:(BOOL)autoplay
+{
+  if ([entry length] == 0)
+    {
+      return;
+    }
+
+  [self.player loadURLString:entry];
+  if (autoplay)
+    {
+      [self.player play];
+      self.playbackPaused = NO;
+      [self.playPauseButton setTitle:@"⏸"];
+    }
+  else
+    {
+      [self.player pause];
+      self.playbackPaused = YES;
+      [self.playPauseButton setTitle:@"▶"];
+    }
+}
+
+- (void)selectAndLoadPlaylistRow:(NSInteger)row autoplay:(BOOL)autoplay
+{
+  if (row < 0 || row >= (NSInteger)[self.playlistItems count])
+    {
+      return;
+    }
+
+  NSString *entry = [self.playlistItems objectAtIndex:(NSUInteger)row];
+  [self.playlistTableView selectRowIndexes:[NSIndexSet indexSetWithIndex:(NSUInteger)row] byExtendingSelection:NO];
+  [self loadEntry:entry autoplay:autoplay];
+  [self updateStatus:[NSString stringWithFormat:@"Loaded %@", [entry lastPathComponent]]];
+}
+
+- (void)addPlaylistPaths:(NSArray<NSString *> *)paths autoplay:(BOOL)autoplay
+{
+  if ([paths count] == 0)
+    {
+      return;
+    }
+
+  NSUInteger i;
+  for (i = 0; i < [paths count]; i++)
+    {
+      NSString *entry = [paths objectAtIndex:i];
+      if ([entry length] > 0)
+        {
+          [self.playlistItems addObject:entry];
+        }
+    }
+
+  [self.playlistTableView reloadData];
+
+  if ([self.playlistItems count] > 0)
+    {
+      NSString *first = [paths objectAtIndex:0];
+      [self.player setNativeWindowID:[self videoHostWindowID]];
+      [self.player loadURLString:first];
+      [self updateStatus:[NSString stringWithFormat:@"Loaded %@", [first lastPathComponent]]];
+
+      NSInteger firstIndex = [self.playlistItems indexOfObject:first];
+      if (firstIndex != NSNotFound)
+        {
+          firstIndex = 0;
+        }
+      [self selectAndLoadPlaylistRow:firstIndex autoplay:autoplay];
+    }
 }
 
 - (void)openFiles
@@ -186,8 +397,7 @@
             }
           [paths addObject:path];
         }
-      [self.player loadPaths:paths];
-      [self updateStatus:[NSString stringWithFormat:@"Loaded %@", [[paths objectAtIndex:0] lastPathComponent]]];
+      [self addPlaylistPaths:paths autoplay:NO];
     }
 }
 
@@ -246,8 +456,13 @@
 
   if (response == NSAlertFirstButtonReturn)
     {
-      [self.player loadURLString:[input stringValue]];
-      [self updateStatus:[NSString stringWithFormat:@"Streaming %@", [input stringValue]]];
+      NSString *value = [input stringValue];
+      if ([value length] > 0)
+        {
+          [self.player setNativeWindowID:[self videoHostWindowID]];
+          [self addPlaylistPaths:[NSArray arrayWithObject:value] autoplay:YES];
+          [self updateStatus:[NSString stringWithFormat:@"Streaming %@", value]];
+        }
     }
 }
 
@@ -268,7 +483,7 @@
 - (void)openTVStream
 {
   NSString *tvURL = @"tv://";
-  [self.player loadURLString:tvURL];
+  [self addPlaylistPaths:[NSArray arrayWithObject:tvURL] autoplay:YES];
   [self updateStatus:@"Opening TV source (tv://)"];
 }
 
@@ -298,7 +513,33 @@
 - (void)onPlayPause:(id)sender
 {
   (void)sender;
-  [self.player togglePlayback];
+
+  if (self.playbackPaused)
+    {
+      if (self.player.currentSource == nil || [self.player.currentSource length] == 0)
+        {
+          NSInteger row = [self.playlistTableView selectedRow];
+          if (row < 0 && [self.playlistItems count] > 0)
+            {
+              row = 0;
+            }
+          if (row >= 0)
+            {
+              [self selectAndLoadPlaylistRow:row autoplay:YES];
+              return;
+            }
+        }
+
+      [self.player play];
+      self.playbackPaused = NO;
+      [self.playPauseButton setTitle:@"⏸"];
+    }
+  else
+    {
+      [self.player pause];
+      self.playbackPaused = YES;
+      [self.playPauseButton setTitle:@"▶"];
+    }
 }
 
 - (void)onForward:(id)sender
@@ -330,6 +571,46 @@
   NSButton *button = (NSButton *)sender;
   NSRect frame = [button bounds];
   [menu popUpMenuPositioningItem:nil atLocation:NSMakePoint(NSMinX(frame), NSMaxY(frame)) inView:button];
+}
+
+- (void)onPlaylistDoubleClick:(id)sender
+{
+  (void)sender;
+  NSInteger row = [self.playlistTableView selectedRow];
+  if (row < 0 || row >= (NSInteger)[self.playlistItems count])
+    {
+      return;
+    }
+
+  NSString *entry = [self.playlistItems objectAtIndex:(NSUInteger)row];
+  [self.player setNativeWindowID:[self videoHostWindowID]];
+  [self.player loadURLString:entry];
+  [self updateStatus:[NSString stringWithFormat:@"Loaded %@", [entry lastPathComponent]]];
+}
+
+- (NSInteger)numberOfRowsInTableView:(NSTableView *)tableView
+{
+  (void)tableView;
+  return (NSInteger)[self.playlistItems count];
+}
+
+- (id)tableView:(NSTableView *)tableView objectValueForTableColumn:(NSTableColumn *)tableColumn row:(NSInteger)row
+{
+  (void)tableView;
+  (void)tableColumn;
+
+  if (row < 0 || row >= (NSInteger)[self.playlistItems count])
+    {
+      return @"";
+    }
+
+  NSString *entry = [self.playlistItems objectAtIndex:(NSUInteger)row];
+  NSString *displayName = [entry lastPathComponent];
+  if ([displayName length] == 0)
+    {
+      displayName = entry;
+    }
+  return displayName;
 }
 
 @end

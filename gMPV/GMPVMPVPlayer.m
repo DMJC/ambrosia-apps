@@ -4,10 +4,17 @@
 
 #if __has_include(<mpv/client.h>)
   #import <mpv/client.h>
-  #import <mpv/opengl_cb.h>
   #define GMPV_HAS_LIBMPV 1
+  #if __has_include(<mpv/opengl_cb.h>)
+    #import <mpv/opengl_cb.h>
+    #define GMPV_HAS_OPENGL_CB 1
+  #else
+    #define GMPV_HAS_OPENGL_CB 0
+    typedef struct mpv_opengl_cb_context mpv_opengl_cb_context;
+  #endif
 #else
   #define GMPV_HAS_LIBMPV 0
+  #define GMPV_HAS_OPENGL_CB 0
   typedef struct mpv_handle mpv_handle;
   typedef struct mpv_opengl_cb_context mpv_opengl_cb_context;
 #endif
@@ -16,7 +23,10 @@
 {
 #if GMPV_HAS_LIBMPV
   mpv_handle *_mpv;
-  mpv_opengl_cb_context *_openglContext;
+  BOOL _initialized;
+  #if GMPV_HAS_OPENGL_CB
+    mpv_opengl_cb_context *_openglContext;
+  #endif
 #endif
   __weak GMPVVideoView *_videoView;
   BOOL _paused;
@@ -60,9 +70,7 @@
       return;
     }
 
-  const char *gpuContext = "wayland";
-  mpv_set_option_string(_mpv, "gpu-context", gpuContext);
-  mpv_set_option_string(_mpv, "vo", "libmpv");
+  mpv_set_option_string(_mpv, "vo", "gpu");
 
   if (mpv_initialize(_mpv) < 0)
     {
@@ -72,16 +80,32 @@
       return;
     }
 
-  _openglContext = mpv_get_sub_api(_mpv, MPV_SUB_API_OPENGL_CB);
-  if (_openglContext == NULL)
-    {
-      NSLog(@"mpv OpenGL callback API unavailable");
-    }
+  #if GMPV_HAS_OPENGL_CB
+    _openglContext = mpv_get_sub_api(_mpv, MPV_SUB_API_OPENGL_CB);
+    if (_openglContext == NULL)
+      {
+        NSLog(@"mpv OpenGL callback API unavailable");
+      }
+  #else
+    NSLog(@"mpv/opengl_cb.h not found. Building without OpenGL callback integration.");
+  #endif
 
   self.ready = YES;
 #else
   NSLog(@"Built without libmpv headers. Player backend is stubbed.");
   self.ready = NO;
+#endif
+}
+
+- (void)setNativeWindowID:(int64_t)wid
+{
+#if GMPV_HAS_LIBMPV
+  if (_mpv != NULL)
+    {
+      mpv_set_property(_mpv, "wid", MPV_FORMAT_INT64, &wid);
+    }
+#else
+  (void)wid;
 #endif
 }
 
