@@ -15,7 +15,8 @@ gMPV_HEADER_FILES = \
   GMPVVideoView.h \
   GMPVMPVPlayer.h
 
-gMPV_RESOURCE_FILES =
+gMPV_APPLICATION_ICON = gMPV.tiff
+gMPV_RESOURCE_FILES = gMPV.tiff
 
 gMPV_GUI_LIBS = -lmpv
 

@@ -23,6 +23,7 @@
 {
 #if GMPV_HAS_LIBMPV
   mpv_handle *_mpv;
+  BOOL _initialized;
   #if GMPV_HAS_OPENGL_CB
     mpv_opengl_cb_context *_openglContext;
   #endif
@@ -69,9 +70,7 @@
       return;
     }
 
-  const char *gpuContext = "wayland";
-  mpv_set_option_string(_mpv, "gpu-context", gpuContext);
-  mpv_set_option_string(_mpv, "vo", "libmpv");
+  mpv_set_option_string(_mpv, "vo", "gpu");
 
   if (mpv_initialize(_mpv) < 0)
     {
@@ -95,6 +94,18 @@
 #else
   NSLog(@"Built without libmpv headers. Player backend is stubbed.");
   self.ready = NO;
+#endif
+}
+
+- (void)setNativeWindowID:(int64_t)wid
+{
+#if GMPV_HAS_LIBMPV
+  if (_mpv != NULL)
+    {
+      mpv_set_property(_mpv, "wid", MPV_FORMAT_INT64, &wid);
+    }
+#else
+  (void)wid;
 #endif
 }
 
