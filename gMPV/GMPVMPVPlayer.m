@@ -4,6 +4,7 @@
 
 #include <inttypes.h>
 #include <dlfcn.h>
+#include <string.h>
 
 #if __has_include(<OpenGL/gl.h>)
   #import <OpenGL/gl.h>
@@ -45,37 +46,18 @@
 
 @property (nonatomic, readwrite, getter=isReady) BOOL ready;
 
+#if GMPV_HAS_LIBMPV && GMPV_HAS_RENDER_GL
+- (void *)lookupGLProcAddress:(const char *)name;
+- (void)requestVideoRedrawOnMainThread;
+#endif
+
 @end
 
 #if GMPV_HAS_LIBMPV && GMPV_HAS_RENDER_GL
 static void *gmpvGetProcAddress(void *ctx, const char *name)
 {
   GMPVMPVPlayer *player = (__bridge GMPVMPVPlayer *)ctx;
-
-  if (player == nil || name == NULL)
-    {
-      return NULL;
-    }
-
-  if (player->_glLibraryHandle == NULL)
-    {
-      player->_glLibraryHandle = dlopen("libGL.so.1", RTLD_LAZY | RTLD_LOCAL);
-      if (player->_glLibraryHandle == NULL)
-        {
-          player->_glLibraryHandle = dlopen("libOpenGL.so.0", RTLD_LAZY | RTLD_LOCAL);
-        }
-    }
-
-  if (player->_glLibraryHandle != NULL)
-    {
-      void *symbol = dlsym(player->_glLibraryHandle, name);
-      if (symbol != NULL)
-        {
-          return symbol;
-        }
-    }
-
-  return dlsym(RTLD_DEFAULT, name);
+  return [player lookupGLProcAddress:name];
 }
 
 static void gmpvRenderUpdateCallback(void *ctx)
@@ -86,14 +68,54 @@ static void gmpvRenderUpdateCallback(void *ctx)
       return;
     }
 
-  GMPVVideoView *view = player->_videoView;
+  [player requestVideoRedrawOnMainThread];
+}
+#endif
+
+@implementation GMPVMPVPlayer
+
+#if GMPV_HAS_LIBMPV && GMPV_HAS_RENDER_GL
+- (void *)lookupGLProcAddress:(const char *)name
+{
+  if (name == NULL)
+    {
+      return NULL;
+    }
+
+  if (_glLibraryHandle == NULL)
+    {
+      _glLibraryHandle = dlopen("libGL.so.1", RTLD_LAZY | RTLD_LOCAL);
+      if (_glLibraryHandle == NULL)
+        {
+          _glLibraryHandle = dlopen("libOpenGL.so.0", RTLD_LAZY | RTLD_LOCAL);
+        }
+    }
+
+  if (_glLibraryHandle != NULL)
+    {
+      void *symbol = dlsym(_glLibraryHandle, name);
+      if (symbol != NULL)
+        {
+          return symbol;
+        }
+    }
+
+  return dlsym(RTLD_DEFAULT, name);
+}
+
+- (void)requestVideoRedrawOnMainThread
+{
+  GMPVVideoView *view = _videoView;
+  if (view == nil)
+    {
+      return;
+    }
+
   [view performSelectorOnMainThread:@selector(requestRedraw)
                          withObject:nil
                       waitUntilDone:NO];
 }
 #endif
-
-@implementation GMPVMPVPlayer
 
 - (instancetype)initWithVideoView:(GMPVVideoView *)videoView
 {
@@ -174,11 +196,10 @@ static void gmpvRenderUpdateCallback(void *ctx)
       return;
     }
 
-  mpv_opengl_init_params glInitParams = {
-    .get_proc_address = gmpvGetProcAddress,
-    .get_proc_address_ctx = (__bridge void *)self,
-    .extra_exts = NULL
-  };
+  mpv_opengl_init_params glInitParams;
+  memset(&glInitParams, 0, sizeof(glInitParams));
+  glInitParams.get_proc_address = gmpvGetProcAddress;
+  glInitParams.get_proc_address_ctx = (__bridge void *)self;
 
   int advancedControl = 1;
   mpv_render_param params[] = {
