@@ -318,6 +318,7 @@
         initWithFrame:NSMakeRect(0, 0, cw - 182, splitH)];
     [_contentSplit setDividerStyle:NSSplitViewDividerStyleThin];
     [_contentSplit setVertical:NO]; // horizontal split: browser top, tracks below
+    [_contentSplit setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
 
     // Browser
     [self _buildBrowser];
@@ -344,6 +345,8 @@
     NSRect trackRect = NSMakeRect(0, 0, cw - 182, splitH - 157);
     [_trackScroll setFrame:trackRect];
     [_contentSplit addSubview:_trackScroll];
+    [_contentSplit setPosition:splitH - 155 ofDividerAtIndex:0];
+    [_contentSplit adjustSubviews];
 
     [_mainSplit addSubview:_contentSplit];
     [content addSubview:_mainSplit];
@@ -440,6 +443,7 @@
     _browserSplit = [[NSSplitView alloc] initWithFrame:NSZeroRect];
     [_browserSplit setDividerStyle:NSSplitViewDividerStyleThin];
     [_browserSplit setVertical:YES];
+    [_browserSplit setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
 
     NSArray *ids    = @[@"genre",    @"artist",    @"album"];
     NSArray *titles = @[@"Genres",   @"Artists",   @"Albums"];
@@ -473,6 +477,9 @@
     [_browserSplit addSubview:_genreScroll];
     [_browserSplit addSubview:_artistScroll];
     [_browserSplit addSubview:_albumScroll];
+    [_browserSplit setPosition:100 ofDividerAtIndex:0];
+    [_browserSplit setPosition:200 ofDividerAtIndex:1];
+    [_browserSplit adjustSubviews];
 
     _browserCtrl = [[BrowserController alloc] init];
     _browserCtrl.delegate = self;
