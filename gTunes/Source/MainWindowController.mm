@@ -324,6 +324,9 @@
     [self _buildBrowser];
     NSRect browserRect = NSMakeRect(0, splitH - 155, cw - 182, 155);
     [_browserSplit setFrame:browserRect];
+    CGFloat browserWidth = NSWidth(browserRect);
+    [_browserSplit setPosition:browserWidth / 3.0 ofDividerAtIndex:0];
+    [_browserSplit setPosition:(browserWidth * 2.0) / 3.0 ofDividerAtIndex:1];
     [_browserSplit adjustSubviews];
     // NSScrollView does not resize its document view; set each table view width
     // explicitly now that the split has established real scroll view frames.
@@ -477,9 +480,6 @@
     [_browserSplit addSubview:_genreScroll];
     [_browserSplit addSubview:_artistScroll];
     [_browserSplit addSubview:_albumScroll];
-    [_browserSplit setPosition:100 ofDividerAtIndex:0];
-    [_browserSplit setPosition:200 ofDividerAtIndex:1];
-    [_browserSplit adjustSubviews];
 
     _browserCtrl = [[BrowserController alloc] init];
     _browserCtrl.delegate = self;
