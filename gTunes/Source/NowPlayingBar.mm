@@ -48,28 +48,32 @@ static const CGFloat kInfoX = 316.0;
     CGFloat volIconY = (60 - 14) / 2.0;
     CGFloat volSliderY = (60 - 16) / 2.0;
 
-    NSTextField *volLow = [[NSTextField alloc]
-        initWithFrame:NSMakeRect(volX, volIconY, 16, 14)];
-    [volLow setBezeled:NO]; [volLow setDrawsBackground:NO];
-    [volLow setEditable:NO]; [volLow setSelectable:NO];
-    [volLow setStringValue:@"🔈"];
-    [[volLow cell] setFont:[NSFont systemFontOfSize:11]];
-    [self addSubview:volLow]; [volLow release];
+    // Low volume icon
+    NSImage *lowImage = [NSImage imageNamed:@"no_volume.tiff"];
+    NSImageView *volLow = [[NSImageView alloc]
+        initWithFrame:NSMakeRect(volX, volIconY, 16, 16)];
+    [volLow setImage:lowImage];
+    [volLow setImageScaling:NSImageScaleProportionallyUpOrDown];
+    [self addSubview:volLow];
+    [volLow release];
 
     _volumeSlider = [[NSSlider alloc]
-        initWithFrame:NSMakeRect(volX + 18, volSliderY, 90, 16)];
-    [_volumeSlider setMinValue:0.0]; [_volumeSlider setMaxValue:1.0];
+         initWithFrame:NSMakeRect(volX + 18, volSliderY, 90, 16)];
+    [_volumeSlider setMinValue:0.0];
+    [_volumeSlider setMaxValue:1.0];
     [_volumeSlider setDoubleValue:[AudioPlayer sharedPlayer].volume];
-    [_volumeSlider setTarget:self]; [_volumeSlider setAction:@selector(_volume:)];
+    [_volumeSlider setTarget:self];
+    [_volumeSlider setAction:@selector(_volume:)];
     [self addSubview:_volumeSlider];
 
-    NSTextField *volHigh = [[NSTextField alloc]
-        initWithFrame:NSMakeRect(volX + 18 + 90 + 4, volIconY, 16, 14)];
-    [volHigh setBezeled:NO]; [volHigh setDrawsBackground:NO];
-    [volHigh setEditable:NO]; [volHigh setSelectable:NO];
-    [volHigh setStringValue:@"🔊"];
-    [[volHigh cell] setFont:[NSFont systemFontOfSize:11]];
-    [self addSubview:volHigh]; [volHigh release];
+    // High volume icon
+    NSImage *highImage = [NSImage imageNamed:@"full_volume.tiff"];
+    NSImageView *volHigh = [[NSImageView alloc]
+        initWithFrame:NSMakeRect(volX + 18 + 90 + 4, volIconY, 16, 16)];
+    [volHigh setImage:highImage];
+    [volHigh setImageScaling:NSImageScaleProportionallyUpOrDown];
+    [self addSubview:volHigh];
+    [volHigh release];
 
     // ── Info box (centre/right) — contains title, artist, progress, time ──
     _infoBox = [[NSBox alloc] initWithFrame:NSZeroRect];
