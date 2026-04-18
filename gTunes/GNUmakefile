@@ -18,7 +18,9 @@ gTunes_OBJCC_FILES =  Source/main.mm \
 
 gTunes_APPLICATION_ICON = gTunes.tiff
 
-gTunes_RESOURCE_FILES = gTunes.tiff
+gTunes_RESOURCE_FILES = gTunes.tiff \
+    Resources/no_volume.tiff \
+    Resources/full_volume.tiff \
 
 gTunes_CPPFLAGS  = $(shell pkg-config --cflags gstreamer-1.0 taglib) -std=c++17
 gTunes_LDFLAGS   = $(shell pkg-config --libs   gstreamer-1.0 taglib)
