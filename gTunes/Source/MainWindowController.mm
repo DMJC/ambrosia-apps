@@ -21,6 +21,7 @@
 - (void)_buildNowPlayingBar;
 - (void)_buildSidebar;
 - (void)_buildBrowser;
+- (void)_layoutBrowserColumns;
 - (void)_buildTrackList;
 - (void)_buildStatusBar;
 - (void)_reloadTrackListForSection:(NSString *)section
@@ -318,12 +319,13 @@
         initWithFrame:NSMakeRect(0, 0, cw - 182, splitH)];
     [_contentSplit setDividerStyle:NSSplitViewDividerStyleThin];
     [_contentSplit setVertical:NO]; // horizontal split: browser top, tracks below
+    [_contentSplit setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
 
     // Browser
     [self _buildBrowser];
     NSRect browserRect = NSMakeRect(0, splitH - 155, cw - 182, 155);
     [_browserSplit setFrame:browserRect];
-    [_browserSplit adjustSubviews];
+    [self _layoutBrowserColumns];
     // NSScrollView does not resize its document view; set each table view width
     // explicitly now that the split has established real scroll view frames.
     {
@@ -350,6 +352,15 @@
 
     // Set initial split positions
     [_mainSplit setPosition:180 ofDividerAtIndex:0];
+    [_mainSplit adjustSubviews];
+
+    // Apply browser/track split after the split views have their final bounds.
+    CGFloat contentH = NSHeight([_contentSplit bounds]);
+    CGFloat browserH = MIN(155.0, MAX(80.0, contentH * 0.30));
+    [_contentSplit setPosition:contentH - browserH ofDividerAtIndex:0];
+    [_contentSplit adjustSubviews];
+
+    [self _layoutBrowserColumns];
 
     // Reload initial data
     [_trackCtrl setTracks:[[MusicLibrary sharedLibrary] allTracks]];
@@ -437,9 +448,8 @@
 - (void)_buildBrowser
 {
     // Three-column browser (Genre | Artist | Album)
-    _browserSplit = [[NSSplitView alloc] initWithFrame:NSZeroRect];
-    [_browserSplit setDividerStyle:NSSplitViewDividerStyleThin];
-    [_browserSplit setVertical:YES];
+    _browserSplit = [[NSView alloc] initWithFrame:NSZeroRect];
+    [_browserSplit setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
 
     NSArray *ids    = @[@"genre",    @"artist",    @"album"];
     NSArray *titles = @[@"Genres",   @"Artists",   @"Albums"];
@@ -479,6 +489,35 @@
     [_browserCtrl setGenreTable:_genreTable
                     artistTable:_artistTable
                      albumTable:_albumTable];
+}
+
+- (void)_layoutBrowserColumns
+{
+    NSRect b = [_browserSplit bounds];
+    if (NSWidth(b) <= 0 || NSHeight(b) <= 0) return;
+
+    CGFloat divider = 1.0;
+    CGFloat colW = (NSWidth(b) - 2.0 * divider) / 3.0;
+    CGFloat h = NSHeight(b);
+
+    NSRect g = NSMakeRect(0, 0, colW, h);
+    NSRect a = NSMakeRect(colW + divider, 0, colW, h);
+    NSRect al = NSMakeRect((colW + divider) * 2.0, 0,
+                           NSWidth(b) - ((colW + divider) * 2.0), h);
+
+    [_genreScroll setFrame:g];
+    [_artistScroll setFrame:a];
+    [_albumScroll setFrame:al];
+
+    NSScrollView *svs[] = { _genreScroll, _artistScroll, _albumScroll };
+    NSTableView  *tvs[] = { _genreTable,  _artistTable,  _albumTable  };
+    for (int i = 0; i < 3; i++) {
+        CGFloat w = NSWidth([svs[i] bounds]);
+        NSRect tf = [tvs[i] frame];
+        tf.size.width = MAX(w, 60);
+        [tvs[i] setFrame:tf];
+        [[tvs[i] tableColumns][0] setWidth:tf.size.width];
+    }
 }
 
 - (void)_buildTrackList

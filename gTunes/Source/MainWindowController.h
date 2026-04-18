@@ -25,7 +25,7 @@
     NSSplitView                *_contentSplit;
 
     // ── Browser (3-column: Genre/Artist/Album) ──
-    NSSplitView                *_browserSplit;
+    NSView                     *_browserSplit;
     NSScrollView               *_genreScroll;
     NSScrollView               *_artistScroll;
     NSScrollView               *_albumScroll;
