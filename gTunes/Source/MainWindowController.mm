@@ -324,10 +324,6 @@
     [self _buildBrowser];
     NSRect browserRect = NSMakeRect(0, splitH - 155, cw - 182, 155);
     [_browserSplit setFrame:browserRect];
-    CGFloat browserWidth = NSWidth(browserRect);
-    [_browserSplit setPosition:browserWidth / 3.0 ofDividerAtIndex:0];
-    [_browserSplit setPosition:(browserWidth * 2.0) / 3.0 ofDividerAtIndex:1];
-    [_browserSplit adjustSubviews];
     // NSScrollView does not resize its document view; set each table view width
     // explicitly now that the split has established real scroll view frames.
     {
@@ -348,14 +344,24 @@
     NSRect trackRect = NSMakeRect(0, 0, cw - 182, splitH - 157);
     [_trackScroll setFrame:trackRect];
     [_contentSplit addSubview:_trackScroll];
-    [_contentSplit setPosition:splitH - 155 ofDividerAtIndex:0];
-    [_contentSplit adjustSubviews];
 
     [_mainSplit addSubview:_contentSplit];
     [content addSubview:_mainSplit];
 
     // Set initial split positions
     [_mainSplit setPosition:180 ofDividerAtIndex:0];
+    [_mainSplit adjustSubviews];
+
+    // Apply browser/track split after the split views have their final bounds.
+    CGFloat contentH = NSHeight([_contentSplit bounds]);
+    CGFloat browserH = MIN(155.0, MAX(80.0, contentH * 0.30));
+    [_contentSplit setPosition:contentH - browserH ofDividerAtIndex:0];
+    [_contentSplit adjustSubviews];
+
+    CGFloat browserW = NSWidth([_browserSplit bounds]);
+    [_browserSplit setPosition:browserW / 3.0 ofDividerAtIndex:0];
+    [_browserSplit setPosition:(browserW * 2.0) / 3.0 ofDividerAtIndex:1];
+    [_browserSplit adjustSubviews];
 
     // Reload initial data
     [_trackCtrl setTracks:[[MusicLibrary sharedLibrary] allTracks]];
