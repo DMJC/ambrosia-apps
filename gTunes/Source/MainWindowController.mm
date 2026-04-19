@@ -320,6 +320,7 @@
     [_contentSplit setDividerStyle:NSSplitViewDividerStyleThin];
     [_contentSplit setVertical:NO]; // horizontal split: browser top, tracks below
     [_contentSplit setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
+    [_contentSplit setDelegate:self];
 
     // Browser
     [self _buildBrowser];
@@ -552,6 +553,12 @@
 }
 
 // ──────────── Delegates ────────────
+
+- (void)splitViewDidResizeSubviews:(NSNotification *)notification
+{
+    if ([notification object] == _contentSplit)
+        [self _layoutBrowserColumns];
+}
 
 - (void)sidebarSelectedSection:(NSString *)section
 {
