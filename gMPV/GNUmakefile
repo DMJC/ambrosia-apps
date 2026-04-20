@@ -7,13 +7,15 @@ gMPV_OBJC_FILES = \
   GMPVAppDelegate.m \
   GMPVPlayerWindowController.m \
   GMPVVideoView.m \
-  GMPVMPVPlayer.m
+  GMPVMPVPlayer.m \
+  GMPVPreferencesWindowController.m
 
 gMPV_HEADER_FILES = \
   GMPVAppDelegate.h \
   GMPVPlayerWindowController.h \
   GMPVVideoView.h \
-  GMPVMPVPlayer.h
+  GMPVMPVPlayer.h \
+  GMPVPreferencesWindowController.h
 
 gMPV_APPLICATION_ICON = gMPV.tiff
 gMPV_RESOURCE_FILES = gMPV.tiff

@@ -183,11 +183,6 @@ static void gmpvRenderUpdateCallback(void *ctx)
 #endif
 }
 
-- (void)setNativeWindowID:(int64_t)wid
-{
-  (void)wid;
-}
-
 - (void)setupRenderContextWithWaylandDisplay:(void *)waylandDisplay
 {
 #if GMPV_HAS_LIBMPV && GMPV_HAS_RENDER_GL

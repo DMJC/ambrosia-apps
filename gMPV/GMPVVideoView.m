@@ -11,6 +11,10 @@
 #endif
 
 @interface GMPVVideoView ()
+{
+  NSOpenGLContext *_glContext;
+  BOOL _renderContextReady;
+}
 
 @property (nonatomic, weak) GMPVMPVPlayer *player;
 @property (nonatomic, assign) void *waylandDisplay;
@@ -27,24 +31,23 @@
     NSOpenGLPFADepthSize, (NSOpenGLPixelFormatAttribute)16,
     (NSOpenGLPixelFormatAttribute)0
   };
-
-  NSOpenGLPixelFormat *format = [[NSOpenGLPixelFormat alloc] initWithAttributes:attrs];
-  return format;
+  return [[NSOpenGLPixelFormat alloc] initWithAttributes:attrs];
 }
 
 - (instancetype)initWithFrame:(NSRect)frame
 {
-  self = [super initWithFrame:frame pixelFormat:[GMPVVideoView defaultPixelFormat]];
-  if (self)
-    {
-    }
+  self = [super initWithFrame:frame];
   return self;
 }
 
 - (void)dealloc
 {
-  [self.openGLContext makeCurrentContext];
-  [self.player teardownRenderContext];
+  if (_glContext != nil)
+    {
+      [_glContext makeCurrentContext];
+      [self.player teardownRenderContext];
+      [NSOpenGLContext clearCurrentContext];
+    }
 }
 
 - (BOOL)isFlipped
@@ -52,17 +55,30 @@
   return YES;
 }
 
-- (void)prepareOpenGL
+- (BOOL)isOpaque
 {
-  [super prepareOpenGL];
-  [self.openGLContext makeCurrentContext];
-  [self.player setupRenderContextWithWaylandDisplay:self.waylandDisplay];
+  return YES;
 }
 
-- (void)reshape
+- (void)ensureGLContext
 {
-  [super reshape];
-  [self requestRedraw];
+  if (_glContext != nil)
+    return;
+
+  NSOpenGLPixelFormat *fmt = [GMPVVideoView defaultPixelFormat];
+  _glContext = [[NSOpenGLContext alloc] initWithFormat:fmt shareContext:nil];
+  if (_glContext != nil)
+    [_glContext setView:self];
+}
+
+- (void)ensureRenderContext
+{
+  if (_renderContextReady || self.player == nil || _glContext == nil)
+    return;
+
+  [_glContext makeCurrentContext];
+  [self.player setupRenderContextWithWaylandDisplay:self.waylandDisplay];
+  _renderContextReady = YES;
 }
 
 - (void)bindPlayer:(GMPVMPVPlayer *)player
@@ -70,13 +86,7 @@
 {
   self.player = player;
   self.waylandDisplay = waylandDisplay;
-
-  if (self.openGLContext != nil)
-    {
-      [self.openGLContext makeCurrentContext];
-      [self.player setupRenderContextWithWaylandDisplay:self.waylandDisplay];
-      [self requestRedraw];
-    }
+  [self setNeedsDisplay:YES];
 }
 
 - (void)requestRedraw
@@ -86,7 +96,18 @@
 
 - (void)drawRect:(NSRect)dirtyRect
 {
-  [self.openGLContext makeCurrentContext];
+  [self ensureGLContext];
+
+  if (_glContext == nil)
+    {
+      [[NSColor blackColor] set];
+      NSRectFill(dirtyRect);
+      return;
+    }
+
+  [self ensureRenderContext];
+  [_glContext makeCurrentContext];
+  [_glContext update];
 
   GLint fbo = 0;
   glGetIntegerv(GL_FRAMEBUFFER_BINDING, &fbo);
@@ -97,23 +118,26 @@
     {
       scale = [[self window] backingScaleFactor];
       if (scale <= 0.0)
-        {
-          scale = 1.0;
-        }
+        scale = 1.0;
     }
 
   int width = (int)lround(NSWidth(bounds) * scale);
   int height = (int)lround(NSHeight(bounds) * scale);
-  [self.player renderFrameWithFramebuffer:fbo
-                                    width:width
-                                   height:height
-                                    flipY:[self isFlipped]];
-  [self.openGLContext flushBuffer];
 
-  if (self.player == nil)
+  if (self.player != nil && _renderContextReady)
     {
-      [super drawRect:dirtyRect];
+      [self.player renderFrameWithFramebuffer:fbo
+                                        width:width
+                                       height:height
+                                        flipY:[self isFlipped]];
     }
+  else
+    {
+      glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+      glClear(GL_COLOR_BUFFER_BIT);
+    }
+
+  [_glContext flushBuffer];
 }
 
 @end

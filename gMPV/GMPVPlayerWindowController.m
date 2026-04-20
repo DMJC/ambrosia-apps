@@ -24,7 +24,6 @@
 @property (nonatomic, strong) NSButton *utilityButton;
 @property (nonatomic, assign) NSInteger urlPromptResult;
 
-@property (nonatomic, strong) NSPanel *videoHostPanel;
 
 @property (nonatomic, strong) NSWindow *playlistWindow;
 @property (nonatomic, strong) NSTableView *playlistTableView;
@@ -59,6 +58,7 @@
   self = [super initWithWindow:window];
   if (self)
     {
+      [window disableCursorRects];
       [window setTitle:@"gMPV"];
       self.playlistItems = [NSMutableArray array];
       [self buildInterface];
@@ -79,7 +79,13 @@
                                                  object:window];
       [self layoutInterface];
 
-      [self showPlaylistWindow];
+      [window center];
+      [window makeKeyAndOrderFront:nil];
+
+      [[NSUserDefaults standardUserDefaults]
+          registerDefaults:@{@"GMPVPlaylistVisible": @YES}];
+      if ([[NSUserDefaults standardUserDefaults] boolForKey:@"GMPVPlaylistVisible"])
+        [self showPlaylistWindow];
     }
   return self;
 }
@@ -87,12 +93,6 @@
 - (void)showWindow:(id)sender
 {
   [super showWindow:sender];
-  [self attachVideoHostPanel];
-  /* Flush pending display-server events so the videoHostPanel's X11 window
-   * is fully mapped and has a valid XID before any caller asks for it via
-   * videoHostWindowID.  Without this drain the wid can arrive as 0 and mpv
-   * opens its own top-level window instead of embedding. */
-  [[NSRunLoop currentRunLoop] runUntilDate:[NSDate dateWithTimeIntervalSinceNow:0.05]];
 }
 
 - (void)dealloc
@@ -110,7 +110,6 @@
 - (void)windowDidMove:(NSNotification *)notification
 {
   (void)notification;
-  [self layoutVideoHostPanel];
   [self layoutPlaylistRelativeToPlayer];
 }
 
@@ -121,18 +120,6 @@
   self.videoView = [[GMPVVideoView alloc] initWithFrame:NSZeroRect];
   self.timelineContainer = [[NSView alloc] initWithFrame:NSZeroRect];
   self.controlsContainer = [[NSView alloc] initWithFrame:NSZeroRect];
-
-  NSUInteger borderlessMask = NSBorderlessWindowMask;
-#ifdef NSWindowStyleMaskBorderless
-  borderlessMask = NSWindowStyleMaskBorderless;
-#endif
-  NSPanel *hostPanel = [[NSPanel alloc] initWithContentRect:NSMakeRect(0, 0, 1, 1)
-                                                   styleMask:borderlessMask
-                                                     backing:NSBackingStoreBuffered
-                                                       defer:NO];
-  [hostPanel setOpaque:YES];
-  [hostPanel setBackgroundColor:[NSColor blackColor]];
-  self.videoHostPanel = hostPanel;
 
   [contentView addSubview:self.videoView];
   [contentView addSubview:self.timelineContainer];
@@ -193,6 +180,7 @@
                                                      styleMask:styleMask
                                                        backing:NSBackingStoreBuffered
                                                          defer:NO];
+  [self.playlistWindow disableCursorRects];
   [self.playlistWindow setTitle:@"gMPV Playlist"];
 
   NSScrollView *scrollView = [[NSScrollView alloc] initWithFrame:[[self.playlistWindow contentView] bounds]];
@@ -234,6 +222,8 @@
       [self layoutPlaylistRelativeToPlayer];
       [self.playlistWindow orderFront:nil];
     }
+  [[NSUserDefaults standardUserDefaults] setBool:[self isPlaylistVisible]
+                                          forKey:@"GMPVPlaylistVisible"];
 }
 
 - (BOOL)isPlaylistVisible
@@ -257,21 +247,6 @@
   [self.playlistWindow setFrame:NSMakeRect(newX, newY, NSWidth(playlistFrame), NSHeight(playerFrame)) display:YES];
 }
 
-- (int64_t)videoHostWindowID
-{
-#ifdef GNUSTEP
-  if (self.videoHostPanel == nil)
-    {
-      return 0;
-    }
-  NSInteger gsWinNum = [self.videoHostPanel windowNumber];
-  void *xid = [GSCurrentServer() windowDevice:gsWinNum];
-  return (int64_t)(uintptr_t)xid;
-#else
-  return 0;
-#endif
-}
-
 - (void *)waylandDisplayHandle
 {
 #ifdef GNUSTEP
@@ -283,28 +258,6 @@
     }
 #endif
   return NULL;
-}
-
-- (void)attachVideoHostPanel
-{
-  if (self.videoHostPanel == nil || self.window == nil)
-    {
-      return;
-    }
-  [self layoutVideoHostPanel];
-  [[self window] addChildWindow:self.videoHostPanel ordered:NSWindowAbove];
-  [self.videoHostPanel orderFront:nil];
-}
-
-- (void)layoutVideoHostPanel
-{
-  if (self.videoHostPanel == nil || self.window == nil)
-    {
-      return;
-    }
-  NSRect videoViewRect = [self.videoView convertRect:[self.videoView bounds] toView:nil];
-  NSRect screenRect = [[self window] convertRectToScreen:videoViewRect];
-  [self.videoHostPanel setFrame:screenRect display:YES];
 }
 
 - (void)layoutInterface
@@ -342,7 +295,6 @@
   [self.statusLabel setFrame:NSMakeRect(NSWidth(controlsFrame) - 320.0, centerY + 2.0, 250.0, 20.0)];
 
   [self.controlsContainer setNeedsDisplay:YES];
-  [self layoutVideoHostPanel];
 }
 
 - (NSButton *)controlButtonWithTitle:(NSString *)title action:(SEL)action

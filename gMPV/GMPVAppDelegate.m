@@ -1,6 +1,7 @@
 #import "GMPVAppDelegate.h"
 
 #import "GMPVPlayerWindowController.h"
+#import "GMPVPreferencesWindowController.h"
 
 @interface GMPVAppDelegate ()
 
@@ -96,6 +97,12 @@
 {
   NSMenu *menu = [[NSMenu alloc] initWithTitle:@"gMPV"];
 
+  [menu addItem:[self menuItemWithTitle:@"Preferences…"
+                                action:@selector(openPreferences:)
+                          keyEquivalent:@","]];
+
+  [menu addItem:[NSMenuItem separatorItem]];
+
   [menu addItem:[self menuItemWithTitle:@"Open Files…"
                                 action:@selector(openFiles:)
                           keyEquivalent:@"o"]];
@@ -162,6 +169,23 @@
   NSMenuItem *item = [[NSMenuItem alloc] initWithTitle:title action:action keyEquivalent:keyEquivalent];
   item.target = self;
   return item;
+}
+
+- (BOOL)application:(NSApplication *)sender openFile:(NSString *)filename
+{
+  (void)sender;
+  if (!filename)
+    return NO;
+  [self.windowController addPlaylistPaths:@[filename] autoplay:YES];
+  return YES;
+}
+
+- (void)openPreferences:(id)sender
+{
+  (void)sender;
+  if (self.preferencesController == nil)
+    self.preferencesController = [[GMPVPreferencesWindowController alloc] init];
+  [[self.preferencesController window] makeKeyAndOrderFront:nil];
 }
 
 - (void)openFiles:(id)sender
