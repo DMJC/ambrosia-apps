@@ -10,7 +10,7 @@ NS_ASSUME_NONNULL_BEGIN
 @property (nonatomic, copy, nullable) NSString *currentSource;
 
 - (instancetype)initWithVideoView:(GMPVVideoView *)videoView;
-- (void)setupRenderContextWithWaylandDisplay:(nullable void *)waylandDisplay;
+- (BOOL)setupRenderContextWithWaylandDisplay:(nullable void *)waylandDisplay;
 - (void)teardownRenderContext;
 - (void)renderFrameWithFramebuffer:(int)framebuffer
                              width:(int)width

@@ -105,9 +105,15 @@
     if ([ident isEqualToString:@"genre"])     return t.genre;
     if ([ident isEqualToString:@"rating"])    return @(t.rating);
     if ([ident isEqualToString:@"playCount"]) return @(t.playCount);
-    if ([ident isEqualToString:@"lastPlayed"])
-        return t.lastPlayed ? [t.lastPlayed descriptionWithCalendarFormat:
-            @"%m/%d/%y %H:%M" timeZone:nil locale:nil] : @"";
+    if ([ident isEqualToString:@"lastPlayed"]) {
+        if (!t.lastPlayed) return @"";
+        static NSDateFormatter *fmt = nil;
+        if (!fmt) {
+            fmt = [[NSDateFormatter alloc] init];
+            [fmt setDateFormat:@"MM/dd/yy HH:mm"];
+        }
+        return [fmt stringFromDate:t.lastPlayed];
+    }
     return nil;
 }
 

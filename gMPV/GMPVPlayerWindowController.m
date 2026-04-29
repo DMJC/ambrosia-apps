@@ -368,8 +368,8 @@
       [self.player loadURLString:first];
       [self updateStatus:[NSString stringWithFormat:@"Loaded %@", [first lastPathComponent]]];
 
-      NSInteger firstIndex = [self.playlistItems indexOfObject:first];
-      if (firstIndex != NSNotFound)
+      NSInteger firstIndex = (NSInteger)[self.playlistItems indexOfObject:first];
+      if (firstIndex == (NSInteger)NSNotFound)
         {
           firstIndex = 0;
         }

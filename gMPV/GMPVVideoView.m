@@ -12,8 +12,8 @@
 
 @interface GMPVVideoView ()
 {
-  NSOpenGLContext *_glContext;
   BOOL _renderContextReady;
+  NSTimer *_displayTimer;
 }
 
 @property (nonatomic, weak) GMPVMPVPlayer *player;
@@ -36,15 +36,19 @@
 
 - (instancetype)initWithFrame:(NSRect)frame
 {
-  self = [super initWithFrame:frame];
+  self = [super initWithFrame:frame pixelFormat:[GMPVVideoView defaultPixelFormat]];
   return self;
 }
 
 - (void)dealloc
 {
-  if (_glContext != nil)
+  [_displayTimer invalidate];
+  _displayTimer = nil;
+
+  NSOpenGLContext *ctx = [self openGLContext];
+  if (ctx != nil)
     {
-      [_glContext makeCurrentContext];
+      [ctx makeCurrentContext];
       [self.player teardownRenderContext];
       [NSOpenGLContext clearCurrentContext];
     }
@@ -60,25 +64,13 @@
   return YES;
 }
 
-- (void)ensureGLContext
-{
-  if (_glContext != nil)
-    return;
-
-  NSOpenGLPixelFormat *fmt = [GMPVVideoView defaultPixelFormat];
-  _glContext = [[NSOpenGLContext alloc] initWithFormat:fmt shareContext:nil];
-  if (_glContext != nil)
-    [_glContext setView:self];
-}
-
 - (void)ensureRenderContext
 {
-  if (_renderContextReady || self.player == nil || _glContext == nil)
+  /* Caller must have already called makeCurrentContext + update on the GL
+     context so that it is drawable-attached when mpv probes it. */
+  if (_renderContextReady || self.player == nil)
     return;
-
-  [_glContext makeCurrentContext];
-  [self.player setupRenderContextWithWaylandDisplay:self.waylandDisplay];
-  _renderContextReady = YES;
+  _renderContextReady = [self.player setupRenderContextWithWaylandDisplay:self.waylandDisplay];
 }
 
 - (void)bindPlayer:(GMPVMPVPlayer *)player
@@ -86,28 +78,76 @@
 {
   self.player = player;
   self.waylandDisplay = waylandDisplay;
-  [self setNeedsDisplay:YES];
+
+  [_displayTimer invalidate];
+  /* Drive redraws from a main-thread timer (same pattern as the MyGL test).
+     GNUstep's performSelectorOnMainThread: routes through NSPortMessage which
+     crashes when called from mpv's unregistered C threads, so the callback
+     path cannot be used to trigger display.  ~30 fps is sufficient for
+     smooth video playback. */
+  _displayTimer = [NSTimer scheduledTimerWithTimeInterval:(1.0 / 30.0)
+                                                   target:self
+                                                 selector:@selector(requestRedraw)
+                                                 userInfo:nil
+                                                  repeats:YES];
 }
 
 - (void)requestRedraw
 {
-  [self setNeedsDisplay:YES];
+  /* setNeedsDisplay:YES alone does not trigger drawRect: in GNUstep/Wayland —
+     there is no compositor expose event to drive the deferred display cycle.
+     Calling display directly forces an immediate synchronous redraw each time
+     the timer fires, matching the pattern used by the MyGL test app. */
+  static NSUInteger _timerCount = 0;
+  ++_timerCount;
+  /* Log every tick for the first second, then every 3 s */
+  if (_timerCount <= 30 || _timerCount % 90 == 0)
+    NSLog(@"[gMPV] requestRedraw #%lu", (unsigned long)_timerCount);
+  [self display];
 }
 
 - (void)drawRect:(NSRect)dirtyRect
 {
-  [self ensureGLContext];
+  NSOpenGLContext *ctx = [self openGLContext];
 
-  if (_glContext == nil)
+  if (ctx == nil)
     {
       [[NSColor blackColor] set];
       NSRectFill(dirtyRect);
       return;
     }
 
+  /* Attach the context to the drawable before anything else, including the
+     mpv render context setup, so that mpv sees a fully initialised GL surface
+     when it probes the current context. */
+  [ctx makeCurrentContext];
+
+  /* On Wayland, makeCurrentContext fails silently when the wl_surface does
+     not exist yet (GNUstep calls drawRect: before orderwindow: creates it).
+     Skip this frame entirely — the display timer will retry in ~33 ms. */
+  if ([NSOpenGLContext currentContext] != ctx)
+    {
+      static NSUInteger _skipCount = 0;
+      if (++_skipCount <= 3)
+        NSLog(@"[gMPV] drawRect: skipped — context not current (#%lu)", (unsigned long)_skipCount);
+      return;
+    }
+
+  [ctx update];
+
+  static BOOL _firstDraw = YES;
+  if (_firstDraw)
+    {
+      _firstDraw = NO;
+      /* Ensure vsync is off — eglSwapBuffers with interval=1 blocks on the
+         compositor frame callback and starves the main run loop. */
+      long zero = 0;
+      [ctx setValues:&zero forParameter:NSOpenGLCPSwapInterval];
+      NSLog(@"[gMPV] drawRect: first live frame — renderContextReady=%d player=%@",
+            _renderContextReady, self.player);
+    }
+
   [self ensureRenderContext];
-  [_glContext makeCurrentContext];
-  [_glContext update];
 
   GLint fbo = 0;
   glGetIntegerv(GL_FRAMEBUFFER_BINDING, &fbo);
@@ -124,6 +164,11 @@
   int width = (int)lround(NSWidth(bounds) * scale);
   int height = (int)lround(NSHeight(bounds) * scale);
 
+  static NSUInteger _frameCount = 0;
+  if (++_frameCount <= 5 || _frameCount % 90 == 0)
+    NSLog(@"[gMPV] drawRect: frame %lu fbo=%d %dx%d renderReady=%d",
+          (unsigned long)_frameCount, (int)fbo, width, height, _renderContextReady);
+
   if (self.player != nil && _renderContextReady)
     {
       [self.player renderFrameWithFramebuffer:fbo
@@ -137,7 +182,7 @@
       glClear(GL_COLOR_BUFFER_BIT);
     }
 
-  [_glContext flushBuffer];
+  [ctx flushBuffer];
 }
 
 @end

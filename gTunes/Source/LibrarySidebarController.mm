@@ -87,6 +87,9 @@ static SidebarItem *item(NSString *t, NSString *img) {
     [_outlineView setDelegate:self];
     [_outlineView setHeaderView:nil];
     [_outlineView setIndentationPerLevel:12];
+    if ([[_outlineView tableColumns] count] > 0)
+        [_outlineView setOutlineTableColumn:
+            [[_outlineView tableColumns] objectAtIndex:0]];
     [_outlineView reloadData];
     // Expand all groups by default
     for (id group in _sections)

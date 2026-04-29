@@ -18,6 +18,7 @@
     NSString    *_selectedArtist;
     NSString    *_selectedAlbum;
     id<BrowserControllerDelegate> _delegate;
+    BOOL         _updating;
 }
 @property (nonatomic, assign) id<BrowserControllerDelegate> delegate;
 - (void)setGenreTable:(NSTableView *)g

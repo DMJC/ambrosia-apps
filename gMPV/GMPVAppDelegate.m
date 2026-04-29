@@ -6,6 +6,7 @@
 @interface GMPVAppDelegate ()
 
 @property (nonatomic, strong) GMPVPlayerWindowController *windowController;
+@property (nonatomic, strong) NSMutableArray<NSString *> *pendingOpenPaths;
 
 @end
 
@@ -20,7 +21,12 @@
   self.windowController = [[GMPVPlayerWindowController alloc] init];
   [self.windowController showWindow:nil];
 
-  NSArray *startupPaths = [self startupPlaylistEntriesFromArguments];
+  NSMutableArray *startupPaths = [NSMutableArray arrayWithArray:[self startupPlaylistEntriesFromArguments]];
+  if (self.pendingOpenPaths != nil)
+    {
+      [startupPaths addObjectsFromArray:self.pendingOpenPaths];
+      self.pendingOpenPaths = nil;
+    }
   if ([startupPaths count] > 0)
     {
       [self.windowController addPlaylistPaths:startupPaths autoplay:YES];
@@ -176,7 +182,16 @@
   (void)sender;
   if (!filename)
     return NO;
-  [self.windowController addPlaylistPaths:@[filename] autoplay:YES];
+  if (self.windowController != nil)
+    {
+      [self.windowController addPlaylistPaths:@[filename] autoplay:YES];
+    }
+  else
+    {
+      if (self.pendingOpenPaths == nil)
+        self.pendingOpenPaths = [NSMutableArray array];
+      [self.pendingOpenPaths addObject:filename];
+    }
   return YES;
 }
 

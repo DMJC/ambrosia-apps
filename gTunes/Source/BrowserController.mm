@@ -71,9 +71,10 @@
 - (id)tableView:(NSTableView *)tv objectValueForTableColumn:(NSTableColumn *)col
             row:(NSInteger)row
 {
-    if (tv == _genreTable)  return _genres [row];
-    if (tv == _artistTable) return _artists[row];
-    if (tv == _albumTable)  return _albums [row];
+    if (row < 0) return nil;
+    if (tv == _genreTable  && row < (NSInteger)[_genres  count]) return _genres [row];
+    if (tv == _artistTable && row < (NSInteger)[_artists count]) return _artists[row];
+    if (tv == _albumTable  && row < (NSInteger)[_albums  count]) return _albums [row];
     return nil;
 }
 
@@ -81,9 +82,12 @@
 
 - (void)tableViewSelectionDidChange:(NSNotification *)note
 {
+    if (_updating) return;
+    _updating = YES;
+
     NSTableView *tv = note.object;
     NSInteger row = [tv selectedRow];
-    if (row < 0) return;
+    if (row < 0) { _updating = NO; return; }
 
     MusicLibrary *lib = [MusicLibrary sharedLibrary];
 
@@ -107,7 +111,16 @@
         [_artistTable reloadData];
         [_artistTable deselectAll:nil];
         [_selectedArtist release]; _selectedArtist = nil;
-        [_selectedAlbum  release]; _selectedAlbum  = nil;
+        // Reset album table to match the genre change
+        NSArray *allAlbums = [lib allAlbums];
+        NSMutableArray *al = [NSMutableArray arrayWithObject:
+            [NSString stringWithFormat:@"All (%lu Albums)",
+                (unsigned long)[allAlbums count]]];
+        [al addObjectsFromArray:allAlbums];
+        [_albums release]; _albums = [al retain];
+        [_albumTable reloadData];
+        [_albumTable deselectAll:nil];
+        [_selectedAlbum release]; _selectedAlbum = nil;
     }
     else if (tv == _artistTable) {
         [_selectedArtist release];
@@ -133,5 +146,6 @@
     [_delegate browserSelectionChangedWithGenre:_selectedGenre
                                          artist:_selectedArtist
                                           album:_selectedAlbum];
+    _updating = NO;
 }
 @end

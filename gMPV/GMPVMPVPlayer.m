@@ -38,6 +38,7 @@
   #if GMPV_HAS_RENDER_GL
     mpv_render_context *_renderContext;
     void *_glLibraryHandle;
+    void *_eglLibraryHandle;
   #endif
 #endif
   __weak GMPVVideoView *_videoView;
@@ -78,26 +79,41 @@ static void gmpvRenderUpdateCallback(void *ctx)
 - (void *)lookupGLProcAddress:(const char *)name
 {
   if (name == NULL)
+    return NULL;
+
+  /* EGL path: needed when mpv uses MPV_RENDER_PARAM_WL_DISPLAY (Wayland/EGL).
+     eglGetProcAddress resolves both EGL entry points and GL extension functions. */
+  if (_eglLibraryHandle == NULL)
+    _eglLibraryHandle = dlopen("libEGL.so.1", RTLD_LAZY | RTLD_LOCAL);
+
+  if (_eglLibraryHandle != NULL)
     {
-      return NULL;
+      typedef void *(*EGLGetProcType)(const char *);
+      EGLGetProcType eglGetProc = (EGLGetProcType)dlsym(_eglLibraryHandle, "eglGetProcAddress");
+      if (eglGetProc != NULL)
+        {
+          void *sym = eglGetProc(name);
+          if (sym != NULL)
+            return sym;
+        }
+      void *sym = dlsym(_eglLibraryHandle, name);
+      if (sym != NULL)
+        return sym;
     }
 
+  /* GLX / desktop-GL path: fallback for X11 / XWayland contexts. */
   if (_glLibraryHandle == NULL)
     {
       _glLibraryHandle = dlopen("libGL.so.1", RTLD_LAZY | RTLD_LOCAL);
       if (_glLibraryHandle == NULL)
-        {
-          _glLibraryHandle = dlopen("libOpenGL.so.0", RTLD_LAZY | RTLD_LOCAL);
-        }
+        _glLibraryHandle = dlopen("libOpenGL.so.0", RTLD_LAZY | RTLD_LOCAL);
     }
 
   if (_glLibraryHandle != NULL)
     {
-      void *symbol = dlsym(_glLibraryHandle, name);
-      if (symbol != NULL)
-        {
-          return symbol;
-        }
+      void *sym = dlsym(_glLibraryHandle, name);
+      if (sym != NULL)
+        return sym;
     }
 
   return dlsym(RTLD_DEFAULT, name);
@@ -105,15 +121,9 @@ static void gmpvRenderUpdateCallback(void *ctx)
 
 - (void)requestVideoRedrawOnMainThread
 {
-  GMPVVideoView *view = _videoView;
-  if (view == nil)
-    {
-      return;
-    }
-
-  [view performSelectorOnMainThread:@selector(requestRedraw)
-                         withObject:nil
-                      waitUntilDone:NO];
+  /* Intentional no-op: GNUstep's performSelectorOnMainThread: uses
+     NSPortMessage internally and crashes when called from mpv's unregistered
+     C threads.  Redraws are driven by the timer in GMPVVideoView instead. */
 }
 #endif
 
@@ -144,6 +154,11 @@ static void gmpvRenderUpdateCallback(void *ctx)
     {
       dlclose(_glLibraryHandle);
       _glLibraryHandle = NULL;
+    }
+  if (_eglLibraryHandle != NULL)
+    {
+      dlclose(_eglLibraryHandle);
+      _eglLibraryHandle = NULL;
     }
 #endif
 #endif
@@ -183,13 +198,11 @@ static void gmpvRenderUpdateCallback(void *ctx)
 #endif
 }
 
-- (void)setupRenderContextWithWaylandDisplay:(void *)waylandDisplay
+- (BOOL)setupRenderContextWithWaylandDisplay:(void *)waylandDisplay
 {
 #if GMPV_HAS_LIBMPV && GMPV_HAS_RENDER_GL
   if (_mpv == NULL || !_initialized || _renderContext != NULL)
-    {
-      return;
-    }
+    return _renderContext != NULL;
 
   mpv_opengl_init_params glInitParams;
   memset(&glInitParams, 0, sizeof(glInitParams));
@@ -197,6 +210,11 @@ static void gmpvRenderUpdateCallback(void *ctx)
   glInitParams.get_proc_address_ctx = (__bridge void *)self;
 
   int advancedControl = 1;
+  /* Do not pass MPV_RENDER_PARAM_WL_DISPLAY: our WaylandGLContext creates
+     the EGL display via eglGetDisplay() but mpv validates via
+     eglGetPlatformDisplayEXT(), so the handles differ and mpv returns -18.
+     Without the hint mpv auto-detects the current EGL context, which works
+     for both the Wayland/EGL and X11/GLX backends. */
   mpv_render_param params[] = {
     {MPV_RENDER_PARAM_API_TYPE, (void *)MPV_RENDER_API_TYPE_OPENGL},
     {MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, &glInitParams},
@@ -204,29 +222,22 @@ static void gmpvRenderUpdateCallback(void *ctx)
     {MPV_RENDER_PARAM_INVALID, NULL}
   };
 
-  mpv_render_param paramsWithWayland[] = {
-    {MPV_RENDER_PARAM_API_TYPE, (void *)MPV_RENDER_API_TYPE_OPENGL},
-    {MPV_RENDER_PARAM_OPENGL_INIT_PARAMS, &glInitParams},
-    {MPV_RENDER_PARAM_WL_DISPLAY, waylandDisplay},
-    {MPV_RENDER_PARAM_ADVANCED_CONTROL, &advancedControl},
-    {MPV_RENDER_PARAM_INVALID, NULL}
-  };
-
-  int rc = mpv_render_context_create(&_renderContext,
-                                     _mpv,
-                                     waylandDisplay != NULL ? paramsWithWayland : params);
+  (void)waylandDisplay;
+  int rc = mpv_render_context_create(&_renderContext, _mpv, params);
   if (rc < 0)
     {
       NSLog(@"Failed to create mpv render context (%d)", rc);
       _renderContext = NULL;
-      return;
+      return NO;
     }
 
   mpv_render_context_set_update_callback(_renderContext,
                                          gmpvRenderUpdateCallback,
                                          (__bridge void *)self);
+  return YES;
 #else
   (void)waylandDisplay;
+  return NO;
 #endif
 }
 
@@ -253,6 +264,11 @@ static void gmpvRenderUpdateCallback(void *ctx)
       return;
     }
 
+  static NSUInteger _renderCount = 0;
+  if (++_renderCount <= 5 || _renderCount % 90 == 0)
+    NSLog(@"[gMPV] mpv_render_context_render #%lu fbo=%d %dx%d flipY=%d",
+          (unsigned long)_renderCount, framebuffer, width, height, flipY);
+
   mpv_opengl_fbo fbo = {
     .fbo = framebuffer,
     .w = width,
@@ -267,7 +283,9 @@ static void gmpvRenderUpdateCallback(void *ctx)
     {MPV_RENDER_PARAM_INVALID, NULL}
   };
 
-  mpv_render_context_render(_renderContext, renderParams);
+  int rc = mpv_render_context_render(_renderContext, renderParams);
+  if ((_renderCount <= 5 || _renderCount % 90 == 0) && rc != 0)
+    NSLog(@"[gMPV] mpv_render_context_render returned %d", rc);
 #else
   (void)framebuffer;
   (void)width;

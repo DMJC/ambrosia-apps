@@ -30,6 +30,7 @@
                              album:(NSString *)album;
 - (void)_addMusicFolder:(id)sender;
 - (void)_rescanDefaultLibrary:(id)sender;
+- (void)_clickTrack:(id)sender;
 - (void)_doubleClickTrack:(id)sender;
 - (void)_libraryChanged:(NSNotification *)note;
 - (void)_trackChanged:(NSNotification *)note;
@@ -544,6 +545,7 @@
         if (i == 0) [col setResizingMask:NSTableColumnAutoresizingMask];
         [_trackTable addTableColumn:col]; [col release];
     }
+    [_trackTable setAction:@selector(_clickTrack:)];
     [_trackTable setDoubleAction:@selector(_doubleClickTrack:)];
     [_trackTable setTarget:self];
     [_trackScroll setDocumentView:_trackTable];
@@ -607,10 +609,27 @@
 
 // ──────────── Actions ────────────
 
+- (void)_clickTrack:(id)sender
+{
+    NSInteger row = [_trackTable clickedRow];
+    NSInteger col = [_trackTable clickedColumn];
+    if (row < 0 || col < 0) return;
+    NSString *ident = [[_trackTable tableColumns][col] identifier];
+    if (![ident isEqualToString:@"rating"]) return;
+    MusicTrack *t = [_trackCtrl trackAtRow:row];
+    if (!t) return;
+    t.rating = (t.rating >= 5) ? 0 : t.rating + 1;
+    [_trackTable reloadData];
+    [[MusicLibrary sharedLibrary] save];
+}
+
 - (void)_doubleClickTrack:(id)sender
 {
     NSInteger row = [_trackTable clickedRow];
+    NSInteger col = [_trackTable clickedColumn];
     if (row < 0) return;
+    if (col >= 0 && [[[_trackTable tableColumns][col] identifier]
+            isEqualToString:@"rating"]) return;
     MusicTrack *t = [_trackCtrl trackAtRow:row];
     if (!t) return;
     // Build queue from visible tracks

@@ -4,7 +4,7 @@
 
 NS_ASSUME_NONNULL_BEGIN
 
-@interface GMPVVideoView : NSView
+@interface GMPVVideoView : NSOpenGLView
 
 + (NSOpenGLPixelFormat *)defaultPixelFormat;
 - (void)bindPlayer:(GMPVMPVPlayer *)player
