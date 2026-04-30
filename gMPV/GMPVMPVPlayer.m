@@ -524,6 +524,41 @@ static void gmpvRenderUpdateCallback(void *ctx)
 #endif
 }
 
+- (BOOL)isRenderContextReady
+{
+#if GMPV_HAS_LIBMPV && GMPV_HAS_RENDER_GL
+  return _renderContext != NULL;
+#else
+  return NO;
+#endif
+}
+
+- (double)currentTimePosition
+{
+#if GMPV_HAS_LIBMPV
+  if (_mpv != NULL && _initialized)
+    {
+      double pos = 0.0;
+      mpv_get_property(_mpv, "time-pos", MPV_FORMAT_DOUBLE, &pos);
+      return pos;
+    }
+#endif
+  return 0.0;
+}
+
+- (double)duration
+{
+#if GMPV_HAS_LIBMPV
+  if (_mpv != NULL && _initialized)
+    {
+      double dur = 0.0;
+      mpv_get_property(_mpv, "duration", MPV_FORMAT_DOUBLE, &dur);
+      return dur;
+    }
+#endif
+  return 0.0;
+}
+
 - (void)setPause:(BOOL)pause
 {
   _paused = pause;

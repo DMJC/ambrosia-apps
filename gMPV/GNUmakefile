@@ -18,7 +18,9 @@ gMPV_HEADER_FILES = \
   GMPVPreferencesWindowController.h
 
 gMPV_APPLICATION_ICON = gMPV.tiff
-gMPV_RESOURCE_FILES = gMPV.tiff
+gMPV_RESOURCE_FILES = gMPV.tiff \
+	Resources/volume_low.tiff \
+	Resources/volume_high.tiff \
 
 gMPV_GUI_LIBS = -lmpv -lGL
 

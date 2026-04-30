@@ -9,6 +9,31 @@
 
 #import <objc/message.h>
 
+@interface GMPVPlaylistTableView : NSTableView
+@property (nonatomic, weak) id deleteHandler;
+@end
+
+@implementation GMPVPlaylistTableView
+- (void)keyDown:(NSEvent *)event
+{
+  if ([[event charactersIgnoringModifiers] length] > 0)
+    {
+      unichar key = [[event charactersIgnoringModifiers] characterAtIndex:0];
+      /* 0x7F = Delete (⌫), 0xF728 = Forward Delete */
+      if (key == 0x7F || key == 0xF728)
+        {
+          if ([self.deleteHandler respondsToSelector:@selector(deleteSelectedPlaylistItem:)])
+            {
+              [self.deleteHandler performSelector:@selector(deleteSelectedPlaylistItem:)
+                                       withObject:self];
+              return;
+            }
+        }
+    }
+  [super keyDown:event];
+}
+@end
+
 @interface GMPVPlayerWindowController () <NSTableViewDataSource, NSTableViewDelegate>
 
 @property (nonatomic, strong) GMPVVideoView *videoView;
@@ -29,6 +54,11 @@
 @property (nonatomic, strong) NSTableView *playlistTableView;
 @property (nonatomic, strong) NSMutableArray<NSString *> *playlistItems;
 @property (nonatomic, assign) BOOL playbackPaused;
+
+@property (nonatomic, strong) NSImageView *volumeLowIcon;
+@property (nonatomic, strong) NSImageView *volumeHighIcon;
+@property (nonatomic, strong) NSTimer *positionTimer;
+@property (nonatomic, assign) NSInteger pendingAutoplayIndex;
 
 @end
 
@@ -61,6 +91,7 @@
       [window disableCursorRects];
       [window setTitle:@"gMPV"];
       self.playlistItems = [NSMutableArray array];
+      self.pendingAutoplayIndex = -1;
       [self buildInterface];
       [self buildPlaylistWindow];
       _player = [[GMPVMPVPlayer alloc] initWithVideoView:_videoView];
@@ -68,6 +99,14 @@
       self.playbackPaused = YES;
       [self.playPauseButton setTitle:@"▶"];
       [self updateStatus:@"Ready"];
+
+      self.positionTimer = [NSTimer timerWithTimeInterval:0.25
+                                                    target:self
+                                                  selector:@selector(updatePositionSlider)
+                                                  userInfo:nil
+                                                   repeats:YES];
+      [[NSRunLoop mainRunLoop] addTimer:self.positionTimer
+                                forMode:NSRunLoopCommonModes];
 
       [[NSNotificationCenter defaultCenter] addObserver:self
                                                selector:@selector(windowDidResize:)
@@ -97,6 +136,8 @@
 
 - (void)dealloc
 {
+  [self.positionTimer invalidate];
+  self.positionTimer = nil;
   [[NSNotificationCenter defaultCenter] removeObserver:self];
 }
 
@@ -143,6 +184,14 @@
   self.volumeSlider.target = self;
   self.volumeSlider.action = @selector(onVolume:);
 
+  self.volumeLowIcon = [[NSImageView alloc] initWithFrame:NSZeroRect];
+  [self.volumeLowIcon setImage:[NSImage imageNamed:@"volume_low.tiff"]];
+  [self.volumeLowIcon setImageScaling:NSImageScaleAxesIndependently];
+
+  self.volumeHighIcon = [[NSImageView alloc] initWithFrame:NSZeroRect];
+  [self.volumeHighIcon setImage:[NSImage imageNamed:@"volume_high.tiff"]];
+  [self.volumeHighIcon setImageScaling:NSImageScaleAxesIndependently];
+
   self.utilityButton = [self controlButtonWithTitle:@"☰" action:@selector(onUtilityMenu:)];
 
   self.statusLabel = [[NSTextField alloc] initWithFrame:NSZeroRect];
@@ -155,7 +204,9 @@
   [self.controlsContainer addSubview:self.rewindButton];
   [self.controlsContainer addSubview:self.playPauseButton];
   [self.controlsContainer addSubview:self.forwardButton];
+  [self.controlsContainer addSubview:self.volumeLowIcon];
   [self.controlsContainer addSubview:self.volumeSlider];
+  [self.controlsContainer addSubview:self.volumeHighIcon];
   [self.controlsContainer addSubview:self.utilityButton];
   [self.controlsContainer addSubview:self.statusLabel];
 }
@@ -187,7 +238,8 @@
   [scrollView setHasVerticalScroller:YES];
   [scrollView setAutoresizingMask:(NSViewWidthSizable | NSViewHeightSizable)];
 
-  self.playlistTableView = [[NSTableView alloc] initWithFrame:[scrollView bounds]];
+  self.playlistTableView = [[GMPVPlaylistTableView alloc] initWithFrame:[scrollView bounds]];
+  [(GMPVPlaylistTableView *)self.playlistTableView setDeleteHandler:self];
   [self.playlistTableView setDelegate:self];
   [self.playlistTableView setDataSource:self];
   [self.playlistTableView setAllowsEmptySelection:YES];
@@ -197,8 +249,12 @@
 
   NSTableColumn *column = [[NSTableColumn alloc] initWithIdentifier:@"playlistItem"];
   [column setWidth:330.0];
+  [column setEditable:NO];
   [[column headerCell] setStringValue:@"Playlist"];
   [self.playlistTableView addTableColumn:column];
+
+  [self.playlistTableView registerForDraggedTypes:@[@"GMPVPlaylistRow"]];
+  [self.playlistTableView setDraggingSourceOperationMask:NSDragOperationMove forLocal:YES];
 
   [scrollView setDocumentView:self.playlistTableView];
   [[self.playlistWindow contentView] addSubview:scrollView];
@@ -290,7 +346,10 @@
   [self.rewindButton setFrame:NSMakeRect(centerX - 68.0, centerY, 40.0, 24.0)];
   [self.forwardButton setFrame:NSMakeRect(centerX + 28.0, centerY, 40.0, 24.0)];
 
-  [self.volumeSlider setFrame:NSMakeRect(24.0, centerY, 220.0, 24.0)];
+  CGFloat iconY = centerY + 4.0;
+  [self.volumeLowIcon  setFrame:NSMakeRect(24.0,  iconY,  16.0, 16.0)];
+  [self.volumeSlider   setFrame:NSMakeRect(44.0,  centerY, 192.0, 24.0)];
+  [self.volumeHighIcon setFrame:NSMakeRect(240.0, iconY,  16.0, 16.0)];
   [self.utilityButton setFrame:NSMakeRect(NSWidth(controlsFrame) - 52.0, centerY, 36.0, 24.0)];
   [self.statusLabel setFrame:NSMakeRect(NSWidth(controlsFrame) - 320.0, centerY + 2.0, 250.0, 20.0)];
 
@@ -367,10 +426,20 @@
       NSString *first = [paths objectAtIndex:0];
       NSInteger firstIndex = (NSInteger)[self.playlistItems indexOfObject:first];
       if (firstIndex == (NSInteger)NSNotFound)
+        firstIndex = 0;
+
+      if (autoplay && ![self.player isRenderContextReady])
         {
-          firstIndex = 0;
+          /* Render context not yet created — mpv drops video frames received
+             before mpv_render_context_create, producing a black window.
+             Store the index and let updatePositionSlider start playback once
+             the context is live (usually within one display-timer tick). */
+          self.pendingAutoplayIndex = firstIndex;
         }
-      [self selectAndLoadPlaylistRow:firstIndex autoplay:autoplay];
+      else
+        {
+          [self selectAndLoadPlaylistRow:firstIndex autoplay:autoplay];
+        }
     }
 }
 
@@ -489,6 +558,46 @@
   [[self window] performZoom:nil];
 }
 
+- (NSString *)formatTime:(double)seconds
+{
+  NSInteger t = (NSInteger)seconds;
+  NSInteger h = t / 3600;
+  NSInteger m = (t % 3600) / 60;
+  NSInteger s = t % 60;
+  if (h > 0)
+    return [NSString stringWithFormat:@"%ld:%02ld:%02ld", (long)h, (long)m, (long)s];
+  return [NSString stringWithFormat:@"%ld:%02ld", (long)m, (long)s];
+}
+
+- (void)updatePositionSlider
+{
+  if (self.pendingAutoplayIndex >= 0 && [self.player isRenderContextReady])
+    {
+      NSInteger idx = self.pendingAutoplayIndex;
+      self.pendingAutoplayIndex = -1;
+      [self selectAndLoadPlaylistRow:idx autoplay:YES];
+      return;
+    }
+
+  double duration = [self.player duration];
+  double pos      = [self.player currentTimePosition];
+
+  if (duration > 0.0)
+    {
+      if (self.timelineSlider.maxValue != duration)
+        self.timelineSlider.maxValue = duration;
+      self.timelineSlider.doubleValue = pos;
+
+      NSString *name = [[self.player.currentSource lastPathComponent] stringByDeletingPathExtension];
+      if (name == nil || [name length] == 0)
+        name = self.player.currentSource ?: @"";
+      [self updateStatus:[NSString stringWithFormat:@"%@  %@ / %@",
+                          name,
+                          [self formatTime:pos],
+                          [self formatTime:duration]]];
+    }
+}
+
 - (void)updateStatus:(NSString *)status
 {
   self.statusLabel.stringValue = status;
@@ -542,7 +651,7 @@
 - (void)onForward:(id)sender
 {
   (void)sender;
-  double nextValue = MIN(100.0, self.timelineSlider.doubleValue + 10.0);
+  double nextValue = MIN(self.timelineSlider.maxValue, self.timelineSlider.doubleValue + 10.0);
   self.timelineSlider.doubleValue = nextValue;
   [self.player seekToRelativeSeconds:nextValue];
 }
@@ -570,16 +679,83 @@
   [menu popUpMenuPositioningItem:nil atLocation:NSMakePoint(NSMinX(frame), NSMaxY(frame)) inView:button];
 }
 
-- (void)onPlaylistDoubleClick:(id)sender
+- (void)deleteSelectedPlaylistItem:(id)sender
 {
   (void)sender;
   NSInteger row = [self.playlistTableView selectedRow];
+  if (row < 0 || row >= (NSInteger)[self.playlistItems count])
+    return;
+
+  [self.playlistItems removeObjectAtIndex:(NSUInteger)row];
+  [self.playlistTableView reloadData];
+
+  NSInteger remaining = (NSInteger)[self.playlistItems count];
+  if (remaining > 0)
+    {
+      NSInteger newRow = MIN(row, remaining - 1);
+      [self.playlistTableView selectRowIndexes:[NSIndexSet indexSetWithIndex:(NSUInteger)newRow]
+                          byExtendingSelection:NO];
+    }
+}
+
+- (void)onPlaylistDoubleClick:(id)sender
+{
+  (void)sender;
+  NSInteger row = [self.playlistTableView clickedRow];
   if (row < 0 || row >= (NSInteger)[self.playlistItems count])
     {
       return;
     }
 
   [self selectAndLoadPlaylistRow:row autoplay:YES];
+}
+
+- (BOOL)tableView:(NSTableView *)tableView shouldEditTableColumn:(NSTableColumn *)tableColumn row:(NSInteger)row
+{
+  (void)tableView; (void)tableColumn; (void)row;
+  return NO;
+}
+
+- (BOOL)tableView:(NSTableView *)tableView writeRowsWithIndexes:(NSIndexSet *)rowIndexes toPasteboard:(NSPasteboard *)pboard
+{
+  (void)tableView;
+  [pboard declareTypes:@[@"GMPVPlaylistRow"] owner:self];
+  [pboard setString:[NSString stringWithFormat:@"%lu", (unsigned long)[rowIndexes firstIndex]]
+            forType:@"GMPVPlaylistRow"];
+  return YES;
+}
+
+- (NSDragOperation)tableView:(NSTableView *)tableView validateDrop:(id<NSDraggingInfo>)info proposedRow:(NSInteger)row proposedDropOperation:(NSTableViewDropOperation)op
+{
+  if ([info draggingSource] != tableView)
+    return NSDragOperationNone;
+  [tableView setDropRow:row dropOperation:NSTableViewDropAbove];
+  return NSDragOperationMove;
+}
+
+- (BOOL)tableView:(NSTableView *)tableView acceptDrop:(id<NSDraggingInfo>)info row:(NSInteger)row dropOperation:(NSTableViewDropOperation)op
+{
+  (void)op;
+  NSString *rowStr = [[info draggingPasteboard] stringForType:@"GMPVPlaylistRow"];
+  if (rowStr == nil)
+    return NO;
+
+  NSInteger fromRow = [rowStr integerValue];
+  if (fromRow < 0 || fromRow >= (NSInteger)[self.playlistItems count])
+    return NO;
+  if (fromRow == row || fromRow + 1 == row)
+    return NO;
+
+  NSString *item = [self.playlistItems objectAtIndex:(NSUInteger)fromRow];
+  [self.playlistItems removeObjectAtIndex:(NSUInteger)fromRow];
+
+  NSInteger dest = (fromRow < row) ? row - 1 : row;
+  [self.playlistItems insertObject:item atIndex:(NSUInteger)dest];
+
+  [tableView reloadData];
+  [tableView selectRowIndexes:[NSIndexSet indexSetWithIndex:(NSUInteger)dest]
+        byExtendingSelection:NO];
+  return YES;
 }
 
 - (NSInteger)numberOfRowsInTableView:(NSTableView *)tableView

@@ -24,6 +24,9 @@ NS_ASSUME_NONNULL_BEGIN
 - (void)loadPaths:(NSArray<NSString *> *)paths;
 - (void)setVolume:(float)volume;
 - (void)seekToRelativeSeconds:(double)seconds;
+- (double)currentTimePosition;
+- (double)duration;
+- (BOOL)isRenderContextReady;
 
 @end
 

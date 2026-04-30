@@ -103,7 +103,19 @@
   /* Log every tick for the first second, then every 3 s */
   if (_timerCount <= 30 || _timerCount % 90 == 0)
     NSLog(@"[gMPV] requestRedraw #%lu", (unsigned long)_timerCount);
-  [self display];
+
+  /* GNUstep's Wayland display server rejects synchronous display calls while
+     it is busy processing a drag operation, raising "mouseEvent with wrong
+     type".  Catch and discard that exception so the timer survives; the next
+     tick will render the skipped frame. */
+  @try
+    {
+      [self display];
+    }
+  @catch (NSException *e)
+    {
+      (void)e;
+    }
 }
 
 - (void)drawRect:(NSRect)dirtyRect
