@@ -21,11 +21,15 @@
   self.windowController = [[GMPVPlayerWindowController alloc] init];
   [self.windowController showWindow:nil];
 
-  NSMutableArray *startupPaths = [NSMutableArray arrayWithArray:[self startupPlaylistEntriesFromArguments]];
-  if (self.pendingOpenPaths != nil)
+  NSMutableArray *startupPaths;
+  if (self.pendingOpenPaths != nil && [self.pendingOpenPaths count] > 0)
     {
-      [startupPaths addObjectsFromArray:self.pendingOpenPaths];
+      startupPaths = self.pendingOpenPaths;
       self.pendingOpenPaths = nil;
+    }
+  else
+    {
+      startupPaths = [NSMutableArray arrayWithArray:[self startupPlaylistEntriesFromArguments]];
     }
   if ([startupPaths count] > 0)
     {

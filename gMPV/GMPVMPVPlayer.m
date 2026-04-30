@@ -5,6 +5,7 @@
 #include <inttypes.h>
 #include <dlfcn.h>
 #include <string.h>
+#include <unistd.h>
 
 #if __has_include(<OpenGL/gl.h>)
   #import <OpenGL/gl.h>
@@ -51,6 +52,8 @@
 - (void *)lookupGLProcAddress:(const char *)name;
 - (void)requestVideoRedrawOnMainThread;
 #endif
+- (void)logVAAPIAvailability;
+- (void)logEGLExtensions;
 
 @end
 
@@ -164,6 +167,135 @@ static void gmpvRenderUpdateCallback(void *ctx)
 #endif
 }
 
+- (void)logVAAPIAvailability
+{
+  void *lib = dlopen("libva.so.2", RTLD_LAZY | RTLD_LOCAL);
+  if (lib == NULL)
+    lib = dlopen("libva.so.1", RTLD_LAZY | RTLD_LOCAL);
+  BOOL libFound = (lib != NULL);
+  if (lib != NULL)
+    dlclose(lib);
+
+  /* Check the most common DRM render node; scan D128–D135 to catch systems
+     where the primary GPU is not at D128. */
+  NSString *foundNode = nil;
+  int n;
+  for (n = 128; n <= 135; n++)
+    {
+      char path[32];
+      snprintf(path, sizeof(path), "/dev/dri/renderD%d", n);
+      if (access(path, R_OK | W_OK) == 0)
+        {
+          foundNode = [NSString stringWithUTF8String:path];
+          break;
+        }
+    }
+
+  NSLog(@"[gMPV] VAAPI probe: libva=%@  DRM node=%@",
+        libFound ? @"found" : @"NOT FOUND",
+        foundNode != nil ? foundNode : @"none accessible");
+  if (libFound && foundNode != nil)
+    NSLog(@"[gMPV] VAAPI: available — hwdec=vaapi-copy should work");
+  else
+    NSLog(@"[gMPV] VAAPI: unavailable — software decode will be used");
+}
+
+- (void)logEGLExtensions
+{
+#if GMPV_HAS_RENDER_GL
+  /* Use the already-loaded EGL library handle if available, otherwise open
+     it transiently just for this probe. */
+  void *handle = _eglLibraryHandle;
+  BOOL ownHandle = NO;
+  if (handle == NULL)
+    {
+      handle = dlopen("libEGL.so.1", RTLD_LAZY | RTLD_LOCAL);
+      ownHandle = YES;
+    }
+
+  if (handle == NULL)
+    {
+      NSLog(@"[gMPV] EGL probe: libEGL not loaded — cannot query extensions");
+      return;
+    }
+
+  typedef void *EGLDisplayHandle;
+  typedef EGLDisplayHandle (*GetCurrDispFn)(void);
+  typedef const char   *(*QueryStringFn)(EGLDisplayHandle, int);
+  /* EGL_NO_DISPLAY = NULL, EGL_EXTENSIONS = 0x3054 */
+  GetCurrDispFn getCurrDisp = (GetCurrDispFn)dlsym(handle, "eglGetCurrentDisplay");
+  QueryStringFn queryString = (QueryStringFn)dlsym(handle, "eglQueryString");
+
+  if (getCurrDisp == NULL || queryString == NULL)
+    {
+      NSLog(@"[gMPV] EGL probe: eglGetCurrentDisplay/eglQueryString not found in libEGL");
+      if (ownHandle) dlclose(handle);
+      return;
+    }
+
+  EGLDisplayHandle dpy = getCurrDisp();
+  NSLog(@"[gMPV] EGL probe: current display=%p", dpy);
+
+  if (dpy != NULL)
+    {
+      const char *exts = queryString(dpy, 0x3055 /* EGL_EXTENSIONS */);
+      if (exts != NULL)
+        {
+          BOOL hasDmaBuf   = strstr(exts, "EGL_EXT_image_dma_buf_import") != NULL;
+          BOOL hasModifiers = strstr(exts, "EGL_EXT_image_dma_buf_import_modifiers") != NULL;
+          BOOL hasImageBase = strstr(exts, "EGL_KHR_image_base") != NULL;
+          NSLog(@"[gMPV] EGL display extensions:");
+          NSLog(@"[gMPV]   EGL_EXT_image_dma_buf_import          = %@ %@",
+                hasDmaBuf ? @"YES" : @"NO",
+                hasDmaBuf ? @"← vaapi direct interop possible"
+                          : @"← vaapi-copy required");
+          NSLog(@"[gMPV]   EGL_EXT_image_dma_buf_import_modifiers = %@",
+                hasModifiers ? @"YES" : @"NO");
+          NSLog(@"[gMPV]   EGL_KHR_image_base                     = %@",
+                hasImageBase ? @"YES" : @"NO");
+        }
+      else
+        {
+          NSLog(@"[gMPV] EGL probe: eglQueryString returned NULL");
+        }
+    }
+
+  /* Probe client extensions (EGL 1.5+, display-independent).  libglvnd
+     returns its version string instead of real extensions for NULL display,
+     so only log when the result looks like an actual extension list. */
+  const char *clientExts = queryString(NULL /* EGL_NO_DISPLAY */, 0x3055);
+  if (clientExts != NULL && strstr(clientExts, "EGL_") != NULL)
+    NSLog(@"[gMPV] EGL client extensions: %s", clientExts);
+  else
+    NSLog(@"[gMPV] EGL client extensions: unavailable (libglvnd dispatch)");
+
+  if (ownHandle)
+    dlclose(handle);
+
+  /* Check the GL extensions needed for direct VAAPI→GL texture interop.
+     GL_OES_EGL_image / glEGLImageTargetTexture2DOES is required for vaapi
+     (zero-copy) but is an OpenGL ES extension — absent from desktop GL core
+     profiles.  If missing, vaapi-copy is the only working hwdec mode. */
+  const GLubyte *glExts = glGetString(GL_EXTENSIONS);
+  if (glExts != NULL)
+    {
+      const char *s = (const char *)glExts;
+      BOOL hasOESImage    = strstr(s, "GL_OES_EGL_image")          != NULL;
+      BOOL hasOESExternal = strstr(s, "GL_OES_EGL_image_external") != NULL;
+      BOOL hasEXTStorage  = strstr(s, "GL_EXT_EGL_image_storage")  != NULL;
+      NSLog(@"[gMPV] GL extensions for VAAPI direct interop:");
+      NSLog(@"[gMPV]   GL_OES_EGL_image         = %@%@", hasOESImage ? @"YES" : @"NO",
+            hasOESImage ? @"" : @" ← vaapi (direct) will produce black frames");
+      NSLog(@"[gMPV]   GL_OES_EGL_image_external = %@", hasOESExternal ? @"YES" : @"NO");
+      NSLog(@"[gMPV]   GL_EXT_EGL_image_storage  = %@", hasEXTStorage  ? @"YES" : @"NO");
+      if (!hasOESImage && !hasEXTStorage)
+        NSLog(@"[gMPV]   → use hwdec=vaapi-copy or hwdec=no");
+    }
+  else
+    NSLog(@"[gMPV] GL extensions: glGetString returned NULL (core profile — check glGetStringi)");
+#endif
+}
+
 - (void)bootstrapMPV
 {
 #if GMPV_HAS_LIBMPV
@@ -181,6 +313,15 @@ static void gmpvRenderUpdateCallback(void *ctx)
   mpv_set_option_string(_mpv, "keep-open", "yes");
   mpv_set_option_string(_mpv, "input-default-bindings", "no");
   mpv_set_option_string(_mpv, "input-vo-keyboard", "no");
+  mpv_set_option_string(_mpv, "log-file", "/tmp/gmpv-mpv.log");
+  mpv_set_option_string(_mpv, "msg-level", "all=v");
+  /* All required extensions are present (EGL_EXT_image_dma_buf_import,
+     GL_OES_EGL_image, GL_EXT_EGL_image_storage) but hwdec=vaapi still
+     produces black frames — likely a DRM format/modifier or VAAPI display
+     mismatch that is only visible in mpv's own log.  Use vaapi-copy for now;
+     it reads decoded frames back to system memory before the GL upload so it
+     bypasses the EGL image path entirely and is known to work. */
+  mpv_set_option_string(_mpv, "hwdec", "vaapi-copy");
 
   if (mpv_initialize(_mpv) < 0)
     {
@@ -192,6 +333,7 @@ static void gmpvRenderUpdateCallback(void *ctx)
 
   _initialized = YES;
   self.ready = YES;
+  [self logVAAPIAvailability];
 #else
   NSLog(@"Built without libmpv headers. Player backend is stubbed.");
   self.ready = NO;
@@ -234,6 +376,11 @@ static void gmpvRenderUpdateCallback(void *ctx)
   mpv_render_context_set_update_callback(_renderContext,
                                          gmpvRenderUpdateCallback,
                                          (__bridge void *)self);
+
+  /* Log EGL DMA-BUF interop availability now that the EGL context is current
+     (mpv's context probe ran during mpv_render_context_create above). */
+  [self logEGLExtensions];
+
   return YES;
 #else
   (void)waylandDisplay;

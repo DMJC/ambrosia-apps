@@ -1,0 +1,79 @@
+2026-04-30 14:16:09.659 gMPV[2924842:2924842] Loading 1 user defined AppKit bundles
+2026-04-30 14:16:09.659 gMPV[2924842:2924842] Loaded '/usr/GNUstep/Local/Library/Bundles/AmbrosiaMenus.bundle'
+2026-04-30 14:16:09.802 gMPV[2924842:2924842] [gMPV] drawRect: skipped — context not current (#1)
+2026-04-30 14:16:09.804 gMPV[2924842:2924842] AmbrosiaMenus: connected to MenuServer (AmbrosiaMenuServer).
+2026-04-30 14:16:09.805 gMPV[2924842:2924842] AmbrosiaMenus: registering 4 top-level items for "gMPV" (pid 2924842).
+2026-04-30 14:16:09.805 gMPV[2924842:2924842] AmbrosiaMenus: registration succeeded.
+2026-04-30 14:16:09.806 gMPV[2924842:2924842] [gMPV] requestRedraw #1
+2026-04-30 14:16:09.806 gMPV[2924842:2924842] WaylandGL: _computeViewGeometry: viewBounds={x = 0; y = 0; width = 1280; height = 706} convertedFrame={x = 1; y = 83; width = 1280; height = 706} windowH=813 → waylandFrame={x = 1; y = 24; width = 1280; height = 706}
+2026-04-30 14:16:09.806 gMPV[2924842:2924842] WaylandGL: _ensureSurface: subsurface created glSurface=0x563614586440 pos=(1,24) size=(1280x706)
+2026-04-30 14:16:09.807 gMPV[2924842:2924842] WaylandGL: _ensureSurface: EGL surface ready eglSurface=0x563614587450 eglWindow=0x5636145873b0
+2026-04-30 14:16:09.807 gMPV[2924842:2924842] [gMPV] drawRect: first live frame — renderContextReady=0 player=<GMPVMPVPlayer: 0x563613d4d7d8>
+Cannot load libcuda.so.1
+2026-04-30 14:16:09.808 gMPV[2924842:2924842] [gMPV] drawRect: frame 1 fbo=0 1280x706 renderReady=1
+2026-04-30 14:16:09.808 gMPV[2924842:2924842] [gMPV] mpv_render_context_render #1 fbo=0 1280x706 flipY=1
+2026-04-30 14:16:09.810 gMPV[2924842:2924842] WaylandGL: flushBuffer: eglSwapBuffers #1 result=1 err=0x0
+2026-04-30 14:16:09.812 gMPV[2924842:2924842] AmbrosiaMenus: registering 4 top-level items for "gMPV" (pid 2924842).
+2026-04-30 14:16:09.820 gMPV[2924842:2924842] AmbrosiaMenus: connected to MenuServer (AmbrosiaMenuServer).
+2026-04-30 14:16:09.820 gMPV[2924842:2924842] AmbrosiaMenus: registering 4 top-level items for "gMPV" (pid 2924842).
+2026-04-30 14:16:09.820 gMPV[2924842:2924842] AmbrosiaMenus: registration succeeded.
+2026-04-30 14:16:09.821 gMPV[2924842:2924842] AmbrosiaMenus: registering 4 top-level items for "gMPV" (pid 2924842).
+2026-04-30 14:16:09.821 gMPV[2924842:2924842] AmbrosiaMenus: registration succeeded.
+2026-04-30 14:16:09.821 gMPV[2924842:2924842] AmbrosiaMenus: registration succeeded.
+2026-04-30 14:16:09.822 gMPV[2924842:2924842] [gMPV] drawRect: frame 2 fbo=0 1280x706 renderReady=1
+2026-04-30 14:16:09.822 gMPV[2924842:2924842] [gMPV] mpv_render_context_render #2 fbo=0 1280x706 flipY=1
+2026-04-30 14:16:09.822 gMPV[2924842:2924842] WaylandGL: flushBuffer: eglSwapBuffers #2 result=1 err=0x0
+2026-04-30 14:16:09.844 gMPV[2924842:2924842] AmbrosiaMenus: registering 4 top-level items for "gMPV" (pid 2924842).
+2026-04-30 14:16:09.844 gMPV[2924842:2924842] AmbrosiaMenus: registration succeeded.
+2026-04-30 14:16:09.844 gMPV[2924842:2924842] [gMPV] requestRedraw #2
+2026-04-30 14:16:09.844 gMPV[2924842:2924842] [gMPV] drawRect: frame 3 fbo=0 1280x706 renderReady=1
+2026-04-30 14:16:09.844 gMPV[2924842:2924842] [gMPV] mpv_render_context_render #3 fbo=0 1280x706 flipY=1
+2026-04-30 14:16:09.845 gMPV[2924842:2924842] WaylandGL: flushBuffer: eglSwapBuffers #3 result=1 err=0x0
+2026-04-30 14:16:09.876 gMPV[2924842:2924842] [gMPV] requestRedraw #3
+2026-04-30 14:16:09.876 gMPV[2924842:2924842] [gMPV] drawRect: frame 4 fbo=0 1280x706 renderReady=1
+2026-04-30 14:16:09.876 gMPV[2924842:2924842] [gMPV] mpv_render_context_render #4 fbo=0 1280x706 flipY=1
+2026-04-30 14:16:09.876 gMPV[2924842:2924842] WaylandGL: flushBuffer: eglSwapBuffers #4 result=1 err=0x0
+2026-04-30 14:16:09.909 gMPV[2924842:2924842] [gMPV] requestRedraw #4
+2026-04-30 14:16:09.909 gMPV[2924842:2924842] [gMPV] drawRect: frame 5 fbo=0 1280x706 renderReady=1
+2026-04-30 14:16:09.909 gMPV[2924842:2924842] [gMPV] mpv_render_context_render #5 fbo=0 1280x706 flipY=1
+2026-04-30 14:16:09.909 gMPV[2924842:2924842] WaylandGL: flushBuffer: eglSwapBuffers #5 result=1 err=0x0
+2026-04-30 14:16:09.942 gMPV[2924842:2924842] [gMPV] requestRedraw #5
+2026-04-30 14:16:09.976 gMPV[2924842:2924842] [gMPV] requestRedraw #6
+2026-04-30 14:16:10.009 gMPV[2924842:2924842] [gMPV] requestRedraw #7
+2026-04-30 14:16:10.042 gMPV[2924842:2924842] [gMPV] requestRedraw #8
+2026-04-30 14:16:10.076 gMPV[2924842:2924842] [gMPV] requestRedraw #9
+2026-04-30 14:16:10.109 gMPV[2924842:2924842] [gMPV] requestRedraw #10
+2026-04-30 14:16:10.142 gMPV[2924842:2924842] [gMPV] requestRedraw #11
+2026-04-30 14:16:10.176 gMPV[2924842:2924842] [gMPV] requestRedraw #12
+2026-04-30 14:16:10.209 gMPV[2924842:2924842] [gMPV] requestRedraw #13
+2026-04-30 14:16:10.242 gMPV[2924842:2924842] [gMPV] requestRedraw #14
+2026-04-30 14:16:10.276 gMPV[2924842:2924842] [gMPV] requestRedraw #15
+2026-04-30 14:16:10.309 gMPV[2924842:2924842] [gMPV] requestRedraw #16
+2026-04-30 14:16:10.342 gMPV[2924842:2924842] [gMPV] requestRedraw #17
+2026-04-30 14:16:10.376 gMPV[2924842:2924842] [gMPV] requestRedraw #18
+2026-04-30 14:16:10.409 gMPV[2924842:2924842] [gMPV] requestRedraw #19
+2026-04-30 14:16:10.442 gMPV[2924842:2924842] [gMPV] requestRedraw #20
+2026-04-30 14:16:10.476 gMPV[2924842:2924842] [gMPV] requestRedraw #21
+2026-04-30 14:16:10.509 gMPV[2924842:2924842] [gMPV] requestRedraw #22
+2026-04-30 14:16:10.542 gMPV[2924842:2924842] [gMPV] requestRedraw #23
+2026-04-30 14:16:10.576 gMPV[2924842:2924842] [gMPV] requestRedraw #24
+2026-04-30 14:16:10.609 gMPV[2924842:2924842] [gMPV] requestRedraw #25
+2026-04-30 14:16:10.642 gMPV[2924842:2924842] [gMPV] requestRedraw #26
+2026-04-30 14:16:10.676 gMPV[2924842:2924842] [gMPV] requestRedraw #27
+2026-04-30 14:16:10.709 gMPV[2924842:2924842] [gMPV] requestRedraw #28
+2026-04-30 14:16:10.742 gMPV[2924842:2924842] [gMPV] requestRedraw #29
+2026-04-30 14:16:10.776 gMPV[2924842:2924842] [gMPV] requestRedraw #30
+2026-04-30 14:16:11.624 gMPV[2924842:2924842] AmbrosiaMenus: registering 4 top-level items for "gMPV" (pid 2924842).
+2026-04-30 14:16:11.625 gMPV[2924842:2924842] AmbrosiaMenus: registration succeeded.
+2026-04-30 14:16:12.742 gMPV[2924842:2924842] [gMPV] drawRect: frame 90 fbo=0 1280x706 renderReady=1
+2026-04-30 14:16:12.742 gMPV[2924842:2924842] [gMPV] mpv_render_context_render #90 fbo=0 1280x706 flipY=1
+2026-04-30 14:16:12.743 gMPV[2924842:2924842] WaylandGL: flushBuffer: eglSwapBuffers #90 result=1 err=0x0
+2026-04-30 14:16:12.776 gMPV[2924842:2924842] [gMPV] requestRedraw #90
+2026-04-30 14:16:15.742 gMPV[2924842:2924842] [gMPV] drawRect: frame 180 fbo=0 1280x706 renderReady=1
+2026-04-30 14:16:15.742 gMPV[2924842:2924842] [gMPV] mpv_render_context_render #180 fbo=0 1280x706 flipY=1
+2026-04-30 14:16:15.742 gMPV[2924842:2924842] WaylandGL: flushBuffer: eglSwapBuffers #180 result=1 err=0x0
+2026-04-30 14:16:15.776 gMPV[2924842:2924842] [gMPV] requestRedraw #180
+2026-04-30 14:16:18.742 gMPV[2924842:2924842] [gMPV] drawRect: frame 270 fbo=0 1280x706 renderReady=1
+2026-04-30 14:16:18.742 gMPV[2924842:2924842] [gMPV] mpv_render_context_render #270 fbo=0 1280x706 flipY=1
+2026-04-30 14:16:18.742 gMPV[2924842:2924842] WaylandGL: flushBuffer: eglSwapBuffers #270 result=1 err=0x0
+2026-04-30 14:16:18.776 gMPV[2924842:2924842] [gMPV] requestRedraw #270

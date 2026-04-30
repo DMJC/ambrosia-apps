@@ -42,9 +42,9 @@ static SidebarItem *item(NSString *t, NSString *img) {
     SidebarGroup *lib = [[SidebarGroup alloc] init];
     lib.title = @"LIBRARY";
     lib.children = [NSMutableArray arrayWithObjects:
-        item(@"Music",      @"NSMusicITunesLibrary"),
-        item(@"Podcasts",   @"NSPodcastITunesLibrary"),
-        item(@"Radio",      @"NSRadioITunesLibrary"),
+        item(@"Music",      @"NSMusicgTunesLibrary"),
+        item(@"Podcasts",   @"NSPodcastGTunesLibrary"),
+        item(@"Radio",      @"NSRadioGTunesLibrary"),
         nil];
     [all addObject:lib]; [lib release];
 
@@ -55,11 +55,11 @@ static SidebarItem *item(NSString *t, NSString *img) {
         nil];
     [all addObject:shared]; [shared release];
 
-    SidebarGroup *genius = [[SidebarGroup alloc] init];
-    genius.title = @"GENIUS";
-    genius.children = [NSMutableArray arrayWithObject:
-        item(@"Genius",@"NSSmartBadgeTemplate")];
-    [all addObject:genius]; [genius release];
+    SidebarGroup *intelligence = [[SidebarGroup alloc] init];
+    intelligence.title = @"INTELLIGENCE";
+    intelligence.children = [NSMutableArray arrayWithObject:
+        item(@"Intelligence",@"NSSmartBadgeTemplate")];
+    [all addObject:intelligence]; [intelligence release];
 
     SidebarGroup *pls = [[SidebarGroup alloc] init];
     pls.title = @"PLAYLISTS";

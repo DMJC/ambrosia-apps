@@ -365,9 +365,6 @@
   if ([self.playlistItems count] > 0)
     {
       NSString *first = [paths objectAtIndex:0];
-      [self.player loadURLString:first];
-      [self updateStatus:[NSString stringWithFormat:@"Loaded %@", [first lastPathComponent]]];
-
       NSInteger firstIndex = (NSInteger)[self.playlistItems indexOfObject:first];
       if (firstIndex == (NSInteger)NSNotFound)
         {
@@ -582,9 +579,7 @@
       return;
     }
 
-  NSString *entry = [self.playlistItems objectAtIndex:(NSUInteger)row];
-  [self.player loadURLString:entry];
-  [self updateStatus:[NSString stringWithFormat:@"Loaded %@", [entry lastPathComponent]]];
+  [self selectAndLoadPlaylistRow:row autoplay:YES];
 }
 
 - (NSInteger)numberOfRowsInTableView:(NSTableView *)tableView
