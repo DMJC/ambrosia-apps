@@ -64,7 +64,7 @@ static SidebarItem *item(NSString *t, NSString *img) {
     SidebarGroup *pls = [[SidebarGroup alloc] init];
     pls.title = @"PLAYLISTS";
     pls.children = [NSMutableArray array];
-    [pls.children addObject:item(@"iTunes DJ",     @"NSBonjour")];
+    [pls.children addObject:item(@"gTunes DJ",     @"NSBonjour")];
     [pls.children addObject:item(@"My Top Rated",  @"NSPlaylistTemplate")];
     [pls.children addObject:item(@"Recently Added",@"NSPlaylistTemplate")];
     [pls.children addObject:item(@"Recently Played",@"NSPlaylistTemplate")];

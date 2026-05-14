@@ -144,6 +144,8 @@
 - (void)windowDidResize:(NSNotification *)notification
 {
   (void)notification;
+  NSLog(@"[gMPV-debug] windowDidResize: modalWindow=%@ keyWindow=%@",
+        [NSApp modalWindow], [NSApp keyWindow]);
   [self layoutInterface];
   [self layoutPlaylistRelativeToPlayer];
 }
@@ -244,6 +246,7 @@
   [self.playlistTableView setDataSource:self];
   [self.playlistTableView setAllowsEmptySelection:YES];
   [self.playlistTableView setAllowsMultipleSelection:NO];
+  [self.playlistTableView setDrawsGrid:NO];
   [self.playlistTableView setTarget:self];
   [self.playlistTableView setDoubleAction:@selector(onPlaylistDoubleClick:)];
 
@@ -450,7 +453,33 @@
   panel.canChooseDirectories = NO;
   panel.allowsMultipleSelection = YES;
 
-  if ([panel runModal] == NSFileHandlingPanelOKButton)
+  NSLog(@"[gMPV-debug] openFiles: panel=%@ level=%ld visible=%d",
+        panel, (long)[panel level], (int)[panel isVisible]);
+  NSLog(@"[gMPV-debug] openFiles: [NSApp modalWindow]=%@ [NSApp keyWindow]=%@ [NSApp mainWindow]=%@",
+        [NSApp modalWindow], [NSApp keyWindow], [NSApp mainWindow]);
+
+  /* Observe window lifecycle notifications for the panel */
+  NSNotificationCenter *nc = [NSNotificationCenter defaultCenter];
+  [nc addObserver:self selector:@selector(_debugPanelWillClose:)
+             name:NSWindowWillCloseNotification object:panel];
+  [nc addObserver:self selector:@selector(_debugPanelDidClose:)
+             name:NSWindowDidMiniaturizeNotification object:panel];
+  [nc addObserver:self selector:@selector(_debugPanelOrderedOut:)
+             name:NSWindowDidResignKeyNotification object:panel];
+
+  NSLog(@"[gMPV-debug] openFiles: calling runModal");
+  NSInteger result = [panel runModal];
+  NSLog(@"[gMPV-debug] openFiles: runModal returned %ld (OK=%ld Cancel=%ld)",
+        (long)result, (long)NSFileHandlingPanelOKButton,
+        (long)NSFileHandlingPanelCancelButton);
+  NSLog(@"[gMPV-debug] openFiles: after runModal panel visible=%d",
+        (int)[panel isVisible]);
+
+  [nc removeObserver:self name:NSWindowWillCloseNotification object:panel];
+  [nc removeObserver:self name:NSWindowDidMiniaturizeNotification object:panel];
+  [nc removeObserver:self name:NSWindowDidResignKeyNotification object:panel];
+
+  if (result == NSFileHandlingPanelOKButton)
     {
       NSMutableArray *paths = [NSMutableArray array];
       NSEnumerator *urlEnumerator = [panel.URLs objectEnumerator];
@@ -466,6 +495,34 @@
         }
       [self addPlaylistPaths:paths autoplay:NO];
     }
+}
+
+- (void)_debugPanelWillClose:(NSNotification *)note
+{
+  NSLog(@"[gMPV-debug] *** NSWindowWillCloseNotification for panel window=%@", [note object]);
+  NSLog(@"[gMPV-debug]     [NSApp modalWindow]=%@ [NSApp keyWindow]=%@",
+        [NSApp modalWindow], [NSApp keyWindow]);
+  /* Print a backtrace so we can see what triggered the close */
+  NSArray *syms = [NSThread callStackSymbols];
+  NSUInteger i, count = MIN([syms count], 20u);
+  for (i = 0; i < count; i++)
+    NSLog(@"[gMPV-debug]   %@", [syms objectAtIndex:i]);
+}
+
+- (void)_debugPanelDidClose:(NSNotification *)note
+{
+  NSLog(@"[gMPV-debug] *** NSWindowDidMiniaturizeNotification for panel window=%@", [note object]);
+}
+
+- (void)_debugPanelOrderedOut:(NSNotification *)note
+{
+  NSLog(@"[gMPV-debug] *** NSWindowDidResignKeyNotification for panel window=%@", [note object]);
+  NSLog(@"[gMPV-debug]     [NSApp modalWindow]=%@ [NSApp keyWindow]=%@",
+        [NSApp modalWindow], [NSApp keyWindow]);
+  NSArray *syms = [NSThread callStackSymbols];
+  NSUInteger i, count = MIN([syms count], 20u);
+  for (i = 0; i < count; i++)
+    NSLog(@"[gMPV-debug]   %@", [syms objectAtIndex:i]);
 }
 
 - (void)openURLPrompt

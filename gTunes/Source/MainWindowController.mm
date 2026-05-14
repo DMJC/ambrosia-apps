@@ -15,23 +15,47 @@
 }
 @end
 
-// NSTableView subclass: right-clicking a row selects it (if not already selected)
-// before the context menu appears.
+// NSTableView subclass: shows the context menu on right-mouse-UP rather than DOWN.
+//
+// On X11/GNUstep the default behaviour is to show a context menu on button-down
+// and fire the item under the cursor on button-up.  Because "Info…" is the first
+// menu item it appears right under the cursor, so releasing the right button
+// immediately triggers it without the user ever seeing the menu.
+//
+// Fix: absorb rightMouseDown: (select the row, suppress the default menu-on-press),
+// then show the menu explicitly in rightMouseUp: via popUpContextMenu:withEvent:forView:.
+// By the time the menu appears the right button is already released, so the user
+// can browse items and click freely.
 @interface GTunesTableView : NSTableView
 @end
 @implementation GTunesTableView
-- (NSMenu *)menuForEvent:(NSEvent *)event
+
+- (void)rightMouseDown:(NSEvent *)event
 {
+    // Select the clicked row (if not already in the selection) so that the menu
+    // actions always operate on the intended track(s).
     NSPoint pt = [self convertPoint:[event locationInWindow] fromView:nil];
     NSInteger row = [self rowAtPoint:pt];
-    if (row >= 0) {
-        NSIndexSet *sel = [self selectedRowIndexes];
-        if (![sel containsIndex:(NSUInteger)row])
-            [self selectRowIndexes:[NSIndexSet indexSetWithIndex:(NSUInteger)row]
-                byExtendingSelection:NO];
-    }
-    return [super menuForEvent:event];
+    if (row >= 0 && ![[self selectedRowIndexes] containsIndex:(NSUInteger)row])
+        [self selectRowIndexes:[NSIndexSet indexSetWithIndex:(NSUInteger)row]
+            byExtendingSelection:NO];
+    // Do NOT call super — that would trigger GNUstep's menu-on-down behaviour.
 }
+
+- (void)rightMouseUp:(NSEvent *)event
+{
+    // Show the context menu after the button is released so it behaves like a
+    // normal click-to-open menu rather than a press-and-hold X11 popup.
+    NSMenu *menu = [self menu];
+    if (menu)
+        [NSMenu popUpContextMenu:menu withEvent:event forView:self];
+    else
+        [super rightMouseUp:event];
+}
+
+// Return nil so nothing tries to show a menu during rightMouseDown:.
+- (NSMenu *)menuForEvent:(NSEvent *)event { return nil; }
+
 @end
 
 // Tiny helper: stops the current modal session with a specific return code.
@@ -886,7 +910,7 @@
     [menu setDelegate:self];   // menuNeedsUpdate: rebuilds the playlist submenu
 
     NSMenuItem *info = [menu addItemWithTitle:@"Info…"
-        action:@selector(_trackInfoAction:) keyEquivalent:@""];
+        action:@selector(_trackInfoAction:) keyEquivalent:@"i"];
     [info setTarget:self];
 
     [menu addItem:[NSMenuItem separatorItem]];
