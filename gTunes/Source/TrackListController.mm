@@ -35,7 +35,7 @@
     [_tableView setDataSource:self];
     [_tableView setDelegate:self];
     [_tableView setAllowsMultipleSelection:YES];
-    [_tableView setColumnAutoresizingStyle:NSTableViewLastColumnOnlyAutoresizingStyle];
+
     [_tableView setUsesAlternatingRowBackgroundColors:YES];
     [_tableView setRowHeight:17.0];
 

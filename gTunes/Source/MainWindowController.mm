@@ -442,16 +442,12 @@
     _browserSplit = [[NSView alloc] initWithFrame:NSZeroRect];
     [_browserSplit setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
 
-    NSArray *ids    = @[@"genre",    @"artist",    @"album"];
-    NSArray *titles = @[@"Genres",   @"Artists",   @"Albums"];
-    NSArray *headers = @[@"Genres",  @"Artists",   @"Albums"];
-
     _genreTable  = [self _makeColumnTableWithIdentifiers:@[@"genre"]
-                                                  titles:@[headers[0]]];
+                                                  titles:@[@"Genres"]];
     _artistTable = [self _makeColumnTableWithIdentifiers:@[@"artist"]
-                                                  titles:@[headers[1]]];
+                                                  titles:@[@"Artists"]];
     _albumTable  = [self _makeColumnTableWithIdentifiers:@[@"album"]
-                                                  titles:@[headers[2]]];
+                                                  titles:@[@"Albums"]];
 
     _genreScroll = [[NSScrollView alloc] initWithFrame:NSZeroRect];
     [_genreScroll setBorderType:NSBezelBorder];
@@ -518,15 +514,24 @@
                         @"genre", @"rating",@"playCount", @"lastPlayed"];
     NSArray *colTtl = @[@"Name",  @"Time",  @"Artist", @"Album",
                         @"Genre", @"Rating",@"Play Count",@"Last Played"];
-    CGFloat colW[]  = {220, 50, 120, 130, 80, 72, 72, 130};
+    CGFloat colW[]  = {220,  50,  120,  130,  80,  72,  72,  130};
+    // YES = expands with the window; NO = fixed width
+    BOOL    expand[]= { YES, NO,  YES,  YES,  NO,  NO,  NO,  NO };
 
     _trackTable = [[NSTableView alloc] initWithFrame:NSZeroRect];
     for (NSUInteger i = 0; i < [colIds count]; i++) {
         NSTableColumn *col = [[NSTableColumn alloc] initWithIdentifier:colIds[i]];
         [[col headerCell] setStringValue:colTtl[i]];
         [col setWidth:colW[i]];
-        [col setMinWidth:40];
-        if (i == 0) [col setResizingMask:NSTableColumnAutoresizingMask];
+        if (expand[i]) {
+            [col setMinWidth:40];
+            [col setResizingMask:NSTableColumnAutoresizingMask
+                                | NSTableColumnUserResizingMask];
+        } else {
+            [col setMinWidth:colW[i]];
+            [col setMaxWidth:colW[i]];
+            [col setResizingMask:NSTableColumnNoResizing];
+        }
         [_trackTable addTableColumn:col]; [col release];
     }
     [_trackTable setAction:@selector(_clickTrack:)];
@@ -538,6 +543,9 @@
 
     _trackCtrl = [[TrackListController alloc] init];
     [_trackCtrl setTableView:_trackTable];
+    // Uniform style distributes available space equally across expanding columns
+    // (those with NSTableColumnAutoresizingMask). Fixed columns are unaffected.
+    [_trackTable setColumnAutoresizingStyle:NSTableViewUniformColumnAutoresizingStyle];
 }
 
 // ──────────── Delegates ────────────
