@@ -32,6 +32,7 @@
 @synthesize rating      = _rating;
 @synthesize albumArt    = _albumArt;
 @synthesize artData     = _artData;
+@synthesize fileSize    = _fileSize;
 
 - (id)initWithFilePath:(NSString *)path
 {
@@ -76,6 +77,11 @@ static inline NSString *tlStr(const TagLib::String &s) {
 {
     if (_metadataLoaded) return;
     _metadataLoaded = YES;
+
+    // Cache file size so callers don't need repeated stat() calls on the main thread.
+    NSDictionary *fattrs = [[NSFileManager defaultManager]
+                            attributesOfItemAtPath:_filePath error:nil];
+    _fileSize = [fattrs[NSFileSize] unsignedLongLongValue];
 
     const char *cp = [_filePath fileSystemRepresentation];
     TagLib::FileRef fr(cp, true, TagLib::AudioProperties::Fast);

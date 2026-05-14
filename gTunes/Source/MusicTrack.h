@@ -16,7 +16,8 @@
     NSInteger      _rating;      // 0–5
     NSImage       *_albumArt;
     NSData        *_artData;        // raw JPEG/PNG bytes – used for plist persistence
-    BOOL           _metadataLoaded;
+    BOOL               _metadataLoaded;
+    unsigned long long _fileSize;   // cached so status bar avoids per-track stat() calls
 }
 
 @property (nonatomic, retain) NSString      *filePath;
@@ -32,6 +33,7 @@
 @property (nonatomic, assign) NSInteger      rating;
 @property (nonatomic, retain) NSImage       *albumArt;
 @property (nonatomic, retain) NSData        *artData;
+@property (nonatomic, assign) unsigned long long fileSize;
 
 - (id)initWithFilePath:(NSString *)path;
 - (void)loadMetadata;          // synchronous – call off main thread

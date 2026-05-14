@@ -106,9 +106,16 @@ NSString * const AudioPlayerProgressNotification     = @"AudioPlayerProgress";
     _state = AudioPlayerStatePlaying;
 
     if (!_progressTimer) {
-        _progressTimer = [[NSTimer scheduledTimerWithTimeInterval:0.5
+        // NSRunLoopCommonModes ensures the timer fires even while the user is
+        // dragging a scrollbar, slider, or split-view divider (those push
+        // NSEventTrackingRunLoopMode which suppresses NSDefaultRunLoopMode timers).
+        // Without this the GStreamer bus goes un-drained during UI interactions,
+        // so EOS is missed and the next track never starts until the drag ends.
+        _progressTimer = [[NSTimer timerWithTimeInterval:0.5
             target:self selector:@selector(_pollProgress:)
             userInfo:nil repeats:YES] retain];
+        [[NSRunLoop mainRunLoop] addTimer:_progressTimer
+                                  forMode:NSRunLoopCommonModes];
     }
 
     [[NSNotificationCenter defaultCenter]

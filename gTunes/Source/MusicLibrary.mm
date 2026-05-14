@@ -32,6 +32,8 @@ static NSArray *kSupportedExtensions = nil;
         _artImageCache = [[NSMutableDictionary alloc] init];
         _scanQueue     = dispatch_queue_create("org.gtunes.scan",
                              DISPATCH_QUEUE_SERIAL);
+        _saveQueue     = dispatch_queue_create("org.gtunes.save",
+                             DISPATCH_QUEUE_SERIAL);
         [self load];
         // Ensure built-in playlists always exist
         for (NSString *name in @[@"Podcasts", @"Radio"]) {
@@ -52,6 +54,7 @@ static NSArray *kSupportedExtensions = nil;
     [_artCache      release];
     [_artImageCache release];
     dispatch_release(_scanQueue);
+    dispatch_release(_saveQueue);
     [super dealloc];
 }
 
@@ -275,7 +278,9 @@ static NSArray *kSupportedExtensions = nil;
 
 - (void)save
 {
-    // Build deduplicated artwork dict: hash key -> NSData
+    // Build the serialisable snapshot synchronously — this is fast (in-memory only).
+    // The actual plist write is dispatched async to _saveQueue so the main thread
+    // is never stalled by file I/O during playback.
     NSMutableDictionary *artworkDict = [NSMutableDictionary dictionary];
     NSMutableArray *trackDicts = [NSMutableArray array];
     @synchronized(_tracks) {
@@ -295,6 +300,7 @@ static NSArray *kSupportedExtensions = nil;
                 @"year"       : t.year       ?: @"",
                 @"trackNumber": @(t.trackNumber),
                 @"duration"   : @(t.duration),
+                @"fileSize"   : @(t.fileSize),
                 @"playCount"  : @(t.playCount),
                 @"rating"     : @(t.rating),
                 @"lastPlayed" : t.lastPlayed ?: [NSDate dateWithTimeIntervalSince1970:0],
@@ -315,13 +321,19 @@ static NSArray *kSupportedExtensions = nil;
         @"tracks"        : trackDicts,
         @"artwork"       : artworkDict,
         @"playlists"     : plists,
-        @"playlistOrder" : _playlistNames,
+        @"playlistOrder" : [NSArray arrayWithArray:_playlistNames],
     };
-    BOOL ok = [root writeToFile:[self _savePath] atomically:YES];
-    NSLog(@"[gTunes] library saved to %@ (%lu tracks, %lu unique art) %@",
-          [self _savePath], (unsigned long)[_tracks count],
-          (unsigned long)[artworkDict count],
-          ok ? @"OK" : @"FAILED");
+    NSString *path = [self _savePath];
+    NSUInteger trackCount = [_tracks count];
+    NSUInteger artCount   = [artworkDict count];
+
+    // Writes happen on a dedicated serial queue — never on the main thread.
+    dispatch_async(_saveQueue, ^{
+        BOOL ok = [root writeToFile:path atomically:YES];
+        NSLog(@"[gTunes] library saved to %@ (%lu tracks, %lu unique art) %@",
+              path, (unsigned long)trackCount, (unsigned long)artCount,
+              ok ? @"OK" : @"FAILED");
+    });
 }
 
 - (void)load
@@ -345,6 +357,7 @@ static NSArray *kSupportedExtensions = nil;
         t.year        = d[@"year"];
         t.trackNumber = [d[@"trackNumber"] unsignedIntegerValue];
         t.duration    = [d[@"duration"]    doubleValue];
+        t.fileSize    = [d[@"fileSize"]    unsignedLongLongValue];
         t.playCount   = [d[@"playCount"]   unsignedIntegerValue];
         t.rating      = [d[@"rating"]      integerValue];
         id lp = d[@"lastPlayed"];

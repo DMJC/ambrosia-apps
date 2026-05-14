@@ -518,6 +518,7 @@
         NSRect tf = [tvs[i] frame];
         tf.size.width = MAX(w, 60);
         [tvs[i] setFrame:tf];
+        [tvs[i] setDrawsGrid:NO];
         [[tvs[i] tableColumns][0] setWidth:tf.size.width];
     }
 }
@@ -547,6 +548,7 @@
     }
     [_trackTable setAction:@selector(_clickTrack:)];
     [_trackTable setDoubleAction:@selector(_doubleClickTrack:)];
+    [_trackTable setDrawsGrid:NO];
     [_trackTable setTarget:self];
     [_trackScroll setDocumentView:_trackTable];
 
@@ -825,17 +827,14 @@
     NSArray *tracks = [_trackCtrl tracks];
     NSUInteger n    = [tracks count];
     NSTimeInterval totalSecs = 0;
-    NSUInteger totalBytes = 0;
+    unsigned long long totalBytes = 0;
     for (MusicTrack *t in tracks) {
         totalSecs  += t.duration;
-        // Approximate file size
-        NSDictionary *attrs = [[NSFileManager defaultManager]
-            attributesOfItemAtPath:t.filePath error:nil];
-        totalBytes += [attrs[NSFileSize] unsignedIntegerValue];
+        totalBytes += t.fileSize;
     }
     NSUInteger h = (NSUInteger)(totalSecs / 3600);
     NSUInteger m = (NSUInteger)((totalSecs - h * 3600) / 60);
-    CGFloat mb = totalBytes / (1024.0 * 1024.0);
+    double mb = totalBytes / (1024.0 * 1024.0);
     [_statusBar setStringValue:[NSString stringWithFormat:
         @"%lu songs, %lu.%lu hours, %.1f MB",
         (unsigned long)n, (unsigned long)h, (unsigned long)m, mb]];

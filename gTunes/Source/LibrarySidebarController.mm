@@ -86,6 +86,7 @@ static SidebarItem *item(NSString *t, NSString *img) {
     [_outlineView setDataSource:self];
     [_outlineView setDelegate:self];
     [_outlineView setHeaderView:nil];
+    [_outlineView setDrawsGrid:NO];
     [_outlineView setIndentationPerLevel:12];
     if ([[_outlineView tableColumns] count] > 0)
         [_outlineView setOutlineTableColumn:
