@@ -6,6 +6,7 @@ gTunes_OBJCC_FILES =  Source/main.mm \
     Source/AppDelegate.mm \
     Source/Preferences.mm \
     Source/PreferencesWindowController.mm \
+    Source/TrackInfoWindowController.mm \
     Source/MusicTrack.mm \
     Source/MusicLibrary.mm \
     Source/AudioPlayer.mm \
@@ -16,9 +17,9 @@ gTunes_OBJCC_FILES =  Source/main.mm \
     Source/NowPlayingBar.mm \
     Source/RatingCell.mm
 
-gTunes_APPLICATION_ICON = gTunes.tiff
+gTunes_APPLICATION_ICON = gTunes.svg
 
-gTunes_RESOURCE_FILES = gTunes.tiff \
+gTunes_RESOURCE_FILES = gTunes.svg \
     Resources/no_volume.tiff \
     Resources/full_volume.tiff \
 

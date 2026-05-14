@@ -263,6 +263,18 @@ static NSArray *kSupportedExtensions = nil;
         postNotificationName:MusicLibraryDidChangeNotification object:self];
 }
 
+- (void)removeTrack:(MusicTrack *)track deleteFile:(BOOL)deleteFile
+{
+    @synchronized(_tracks) { [_tracks removeObject:track]; }
+    for (NSString *name in _playlistNames)
+        [_playlistDict[name] removeObject:track];
+    if (deleteFile)
+        [[NSFileManager defaultManager] removeItemAtPath:track.filePath error:nil];
+    [[NSNotificationCenter defaultCenter]
+        postNotificationName:MusicLibraryDidChangeNotification object:self];
+    [self save];
+}
+
 // ──────────── Persistence ────────────
 
 - (NSString *)_savePath

@@ -37,6 +37,13 @@
 
 - (id)initWithFilePath:(NSString *)path;
 - (void)loadMetadata;          // synchronous – call off main thread
+- (void)saveMetadata;          // write stored properties back to audio file tags
+- (void)saveMetadataWithTitle:(NSString *)title  // write explicit values to tags
+                       artist:(NSString *)artist  // without mutating stored properties
+                        album:(NSString *)album
+                        genre:(NSString *)genre
+                         year:(NSString *)year
+                  trackNumber:(NSUInteger)trackNumber;
 - (NSString *)durationString;
 - (NSString *)displayTitle;
 

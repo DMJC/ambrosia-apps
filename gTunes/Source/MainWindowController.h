@@ -4,9 +4,11 @@
 #import "BrowserController.h"
 #import "TrackListController.h"
 #import "NowPlayingBar.h"
+#import "TrackInfoWindowController.h"
 
 @interface MainWindowController : NSWindowController
-    <LibrarySidebarDelegate, BrowserControllerDelegate, NowPlayingBarDelegate>
+    <LibrarySidebarDelegate, BrowserControllerDelegate,
+     NowPlayingBarDelegate, NSMenuDelegate>
 {
     // ── Toolbar / Now Playing ──
     NowPlayingBar              *_nowPlayingBar;
@@ -50,6 +52,13 @@
 
     // Re-entrance guard for browser column layout (prevents notification loops during resize)
     BOOL                        _inBrowserLayout;
+
+    // Track Info window (retained while open)
+    TrackInfoWindowController  *_infoWindowCtrl;
+
+    // Weak refs into the context menu — the menu (owned by _trackTable) retains these
+    NSMenuItem                 *_addToPlaylistItem;
+    NSMenuItem                 *_removeFromPlaylistItem;
 }
 
 - (id)init;

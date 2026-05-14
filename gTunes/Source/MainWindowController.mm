@@ -15,6 +15,35 @@
 }
 @end
 
+// NSTableView subclass: right-clicking a row selects it (if not already selected)
+// before the context menu appears.
+@interface GTunesTableView : NSTableView
+@end
+@implementation GTunesTableView
+- (NSMenu *)menuForEvent:(NSEvent *)event
+{
+    NSPoint pt = [self convertPoint:[event locationInWindow] fromView:nil];
+    NSInteger row = [self rowAtPoint:pt];
+    if (row >= 0) {
+        NSIndexSet *sel = [self selectedRowIndexes];
+        if (![sel containsIndex:(NSUInteger)row])
+            [self selectRowIndexes:[NSIndexSet indexSetWithIndex:(NSUInteger)row]
+                byExtendingSelection:NO];
+    }
+    return [super menuForEvent:event];
+}
+@end
+
+// Tiny helper: stops the current modal session with a specific return code.
+// Used by the "New Playlist" dialog buttons since they can't call stopModalWithCode:
+// themselves (NSApp is the target, not a window controller method).
+@interface GTunesModalHelper : NSObject
+@end
+@implementation GTunesModalHelper
+- (void)okAction:(id)sender     { [NSApp stopModalWithCode:NSAlertFirstButtonReturn]; }
+- (void)cancelAction:(id)sender { [NSApp stopModalWithCode:NSAlertSecondButtonReturn]; }
+@end
+
 @interface MainWindowController ()
 - (void)_buildMenu;
 - (void)_buildWindow;
@@ -49,6 +78,16 @@
 - (void)_exportPlaylist:(id)sender;
 // Help
 - (void)_showHelp:(id)sender;
+// Context menu
+- (void)_buildTrackContextMenu;
+- (NSArray *)_selectedTracks;
+- (void)_trackInfoAction:(id)sender;
+- (void)_loveAction:(id)sender;
+- (void)_dislikeAction:(id)sender;
+- (void)_addToPlaylistAction:(id)sender;
+- (void)_newPlaylistFromSelectionAction:(id)sender;
+- (void)_removeFromPlaylistAction:(id)sender;
+- (void)_deleteFromLibraryAction:(id)sender;
 @end
 
 @implementation MainWindowController
@@ -74,6 +113,7 @@
 {
     [[NSNotificationCenter defaultCenter] removeObserver:self];
     [_currentSection release];
+    [_infoWindowCtrl release];
     [_sidebarArtView release]; [_sidebarContainer release];
     [_sidebarCtrl  release]; [_browserCtrl release]; [_trackCtrl release];
     [super dealloc];
@@ -518,7 +558,7 @@
     // YES = expands with the window; NO = fixed width
     BOOL    expand[]= { YES, NO,  YES,  YES,  NO,  NO,  NO,  NO };
 
-    _trackTable = [[NSTableView alloc] initWithFrame:NSZeroRect];
+    _trackTable = [[GTunesTableView alloc] initWithFrame:NSZeroRect];
     for (NSUInteger i = 0; i < [colIds count]; i++) {
         NSTableColumn *col = [[NSTableColumn alloc] initWithIdentifier:colIds[i]];
         [[col headerCell] setStringValue:colTtl[i]];
@@ -546,6 +586,8 @@
     // Uniform style distributes available space equally across expanding columns
     // (those with NSTableColumnAutoresizingMask). Fixed columns are unaffected.
     [_trackTable setColumnAutoresizingStyle:NSTableViewUniformColumnAutoresizingStyle];
+
+    [self _buildTrackContextMenu];
 }
 
 // ──────────── Delegates ────────────
@@ -834,6 +876,254 @@
     [_statusBar setStringValue:[NSString stringWithFormat:
         @"%lu songs, %lu.%lu hours, %.1f MB",
         (unsigned long)n, (unsigned long)h, (unsigned long)m, mb]];
+}
+
+// ──────────── Context Menu ────────────
+
+- (void)_buildTrackContextMenu
+{
+    NSMenu *menu = [[[NSMenu alloc] initWithTitle:@""] autorelease];
+    [menu setDelegate:self];   // menuNeedsUpdate: rebuilds the playlist submenu
+
+    NSMenuItem *info = [menu addItemWithTitle:@"Info…"
+        action:@selector(_trackInfoAction:) keyEquivalent:@""];
+    [info setTarget:self];
+
+    [menu addItem:[NSMenuItem separatorItem]];
+
+    NSMenuItem *love = [menu addItemWithTitle:@"Love"
+        action:@selector(_loveAction:) keyEquivalent:@""];
+    [love setTarget:self];
+
+    NSMenuItem *dislike = [menu addItemWithTitle:@"Dislike"
+        action:@selector(_dislikeAction:) keyEquivalent:@""];
+    [dislike setTarget:self];
+
+    [menu addItem:[NSMenuItem separatorItem]];
+
+    // "Add to Playlist" — submenu is populated just-in-time in menuNeedsUpdate:
+    _addToPlaylistItem = [menu addItemWithTitle:@"Add to Playlist"
+        action:nil keyEquivalent:@""];
+    NSMenu *sub = [[[NSMenu alloc] initWithTitle:@""] autorelease];
+    [_addToPlaylistItem setSubmenu:sub];
+
+    NSMenuItem *newPL = [menu addItemWithTitle:@"New Playlist from Selection"
+        action:@selector(_newPlaylistFromSelectionAction:) keyEquivalent:@""];
+    [newPL setTarget:self];
+
+    _removeFromPlaylistItem = [menu addItemWithTitle:@"Remove from Playlist"
+        action:@selector(_removeFromPlaylistAction:) keyEquivalent:@""];
+    [_removeFromPlaylistItem setTarget:self];
+
+    [menu addItem:[NSMenuItem separatorItem]];
+
+    NSMenuItem *del = [menu addItemWithTitle:@"Delete from Library"
+        action:@selector(_deleteFromLibraryAction:) keyEquivalent:@""];
+    [del setTarget:self];
+
+    [_trackTable setMenu:menu];
+}
+
+// ── NSMenuDelegate ──
+
+- (void)menuNeedsUpdate:(NSMenu *)menu
+{
+    if (!_addToPlaylistItem) return;
+    NSMenu *sub = [_addToPlaylistItem submenu];
+    [sub removeAllItems];
+    NSArray *names = [[MusicLibrary sharedLibrary] playlistNames];
+    for (NSString *name in names) {
+        NSMenuItem *it = [sub addItemWithTitle:name
+            action:@selector(_addToPlaylistAction:) keyEquivalent:@""];
+        [it setTarget:self];
+        [it setRepresentedObject:name];
+    }
+    if ([names count] == 0) {
+        NSMenuItem *none = [sub addItemWithTitle:@"No Playlists"
+            action:nil keyEquivalent:@""];
+        [none setEnabled:NO];
+    }
+}
+
+- (BOOL)validateMenuItem:(NSMenuItem *)item
+{
+    SEL action = [item action];
+    BOOL hasSel = ([[_trackTable selectedRowIndexes] count] > 0);
+
+    if (action == @selector(_trackInfoAction:))                 return hasSel;
+    if (action == @selector(_loveAction:))                      return hasSel;
+    if (action == @selector(_dislikeAction:))                   return hasSel;
+    if (action == @selector(_newPlaylistFromSelectionAction:))  return hasSel;
+    if (action == @selector(_addToPlaylistAction:))             return hasSel;
+    if (action == @selector(_deleteFromLibraryAction:))         return hasSel;
+
+    if (action == @selector(_removeFromPlaylistAction:)) {
+        if (!hasSel) return NO;
+        // Active only when the user is browsing a named user playlist.
+        return [[[MusicLibrary sharedLibrary] playlistNames]
+                    containsObject:_currentSection];
+    }
+    return YES;
+}
+
+// ── Helpers ──
+
+- (NSArray *)_selectedTracks
+{
+    NSIndexSet *sel = [_trackTable selectedRowIndexes];
+    NSMutableArray *result = [NSMutableArray array];
+    NSUInteger idx = [sel firstIndex];
+    while (idx != NSNotFound) {
+        MusicTrack *t = [_trackCtrl trackAtRow:(NSInteger)idx];
+        if (t) [result addObject:t];
+        idx = [sel indexGreaterThanIndex:idx];
+    }
+    return result;
+}
+
+// ── Action implementations ──
+
+- (void)_trackInfoAction:(id)sender
+{
+    NSArray *tracks = [self _selectedTracks];
+    if ([tracks count] == 0) return;
+    [_infoWindowCtrl release];
+    _infoWindowCtrl = [[TrackInfoWindowController alloc] initWithTracks:tracks];
+    [NSApp runModalForWindow:[_infoWindowCtrl window]];
+    // runModal returns after OK/Cancel call stopModal; reload to reflect any edits.
+    [_trackTable reloadData];
+    [_infoWindowCtrl release];
+    _infoWindowCtrl = nil;
+}
+
+- (void)_loveAction:(id)sender
+{
+    for (MusicTrack *t in [self _selectedTracks]) t.rating = 5;
+    [_trackTable reloadData];
+    [[MusicLibrary sharedLibrary] save];
+}
+
+- (void)_dislikeAction:(id)sender
+{
+    for (MusicTrack *t in [self _selectedTracks]) t.rating = 0;
+    [_trackTable reloadData];
+    [[MusicLibrary sharedLibrary] save];
+}
+
+- (void)_addToPlaylistAction:(id)sender
+{
+    NSString *name = [(NSMenuItem *)sender representedObject];
+    if (!name) return;
+    MusicLibrary *lib = [MusicLibrary sharedLibrary];
+    for (MusicTrack *t in [self _selectedTracks])
+        [lib addTrack:t toPlaylist:name];
+    [lib save];
+}
+
+- (void)_newPlaylistFromSelectionAction:(id)sender
+{
+    // Simple modal input dialog
+    NSWindow *dlg = [[[NSWindow alloc]
+        initWithContentRect:NSMakeRect(0, 0, 320, 118)
+                  styleMask:NSTitledWindowMask | NSClosableWindowMask
+                    backing:NSBackingStoreBuffered
+                      defer:NO] autorelease];
+    [dlg setTitle:@"New Playlist"];
+    [dlg center];
+    NSView *v = [dlg contentView];
+
+    // "Playlist name:" label
+    NSTextField *lbl = [[[NSTextField alloc]
+        initWithFrame:NSMakeRect(16, 82, 130, 18)] autorelease];
+    [lbl setStringValue:@"Playlist name:"];
+    [lbl setBezeled:NO]; [lbl setDrawsBackground:NO];
+    [lbl setEditable:NO]; [lbl setSelectable:NO];
+    [[lbl cell] setFont:[NSFont systemFontOfSize:12]];
+    [v addSubview:lbl];
+
+    // Name text field
+    NSTextField *nameField = [[[NSTextField alloc]
+        initWithFrame:NSMakeRect(16, 56, 288, 24)] autorelease];
+    [[nameField cell] setPlaceholderString:@"Untitled Playlist"];
+    [v addSubview:nameField];
+    [dlg makeFirstResponder:nameField];
+
+    // Buttons
+    GTunesModalHelper *helper = [[[GTunesModalHelper alloc] init] autorelease];
+
+    NSButton *cancelBtn = [[[NSButton alloc]
+        initWithFrame:NSMakeRect(148, 14, 80, 26)] autorelease];
+    [cancelBtn setTitle:@"Cancel"];
+    [cancelBtn setBezelStyle:NSRoundedBezelStyle];
+    [cancelBtn setKeyEquivalent:@"\033"];
+    [cancelBtn setTarget:helper];
+    [cancelBtn setAction:@selector(cancelAction:)];
+    [v addSubview:cancelBtn];
+
+    NSButton *createBtn = [[[NSButton alloc]
+        initWithFrame:NSMakeRect(232, 14, 72, 26)] autorelease];
+    [createBtn setTitle:@"Create"];
+    [createBtn setBezelStyle:NSRoundedBezelStyle];
+    [createBtn setKeyEquivalent:@"\r"];
+    [createBtn setTarget:helper];
+    [createBtn setAction:@selector(okAction:)];
+    [v addSubview:createBtn];
+
+    NSInteger code = [NSApp runModalForWindow:dlg];
+    [dlg orderOut:nil];
+
+    if (code == NSAlertFirstButtonReturn) {
+        NSString *name = [[nameField stringValue]
+            stringByTrimmingCharactersInSet:
+                [NSCharacterSet whitespaceAndNewlineCharacterSet]];
+        if ([name length] > 0) {
+            MusicLibrary *lib = [MusicLibrary sharedLibrary];
+            [lib createPlaylist:name];
+            for (MusicTrack *t in [self _selectedTracks])
+                [lib addTrack:t toPlaylist:name];
+            [lib save];
+            // _libraryChanged: notification will reload the sidebar automatically
+        }
+    }
+}
+
+- (void)_removeFromPlaylistAction:(id)sender
+{
+    MusicLibrary *lib = [MusicLibrary sharedLibrary];
+    for (MusicTrack *t in [self _selectedTracks])
+        [lib removeTrack:t fromPlaylist:_currentSection];
+    [lib save];
+}
+
+- (void)_deleteFromLibraryAction:(id)sender
+{
+    NSArray *tracks = [self _selectedTracks];
+    if ([tracks count] == 0) return;
+
+    NSString *msg, *detail;
+    if ([tracks count] == 1) {
+        msg    = @"Delete from Library?";
+        detail = [NSString stringWithFormat:
+            @"“%@” will be permanently deleted from disk.",
+            [(MusicTrack *)tracks[0] displayTitle]];
+    } else {
+        msg    = @"Delete from Library?";
+        detail = [NSString stringWithFormat:
+            @"%lu tracks will be permanently deleted from disk.",
+            (unsigned long)[tracks count]];
+    }
+
+    NSAlert *alert = [[[NSAlert alloc] init] autorelease];
+    [alert setMessageText:msg];
+    [alert setInformativeText:detail];
+    [alert addButtonWithTitle:@"Delete"];
+    [alert addButtonWithTitle:@"Cancel"];
+
+    if ([alert runModal] == NSAlertFirstButtonReturn) {
+        MusicLibrary *lib = [MusicLibrary sharedLibrary];
+        for (MusicTrack *t in tracks)
+            [lib removeTrack:t deleteFile:YES];
+    }
 }
 
 @end

@@ -73,6 +73,11 @@ static inline NSString *tlStr(const TagLib::String &s) {
     return [NSString stringWithUTF8String:s.toCString(true)];
 }
 
+static inline TagLib::String nsToTL(NSString *s) {
+    if (!s || [s length] == 0) return TagLib::String();
+    return TagLib::String([s UTF8String], TagLib::String::UTF8);
+}
+
 - (void)loadMetadata
 {
     if (_metadataLoaded) return;
@@ -164,6 +169,33 @@ static inline NSString *tlStr(const TagLib::String &s) {
             [_albumArt release]; _albumArt = img;
         }
     }
+}
+
+- (void)saveMetadata
+{
+    [self saveMetadataWithTitle:_title artist:_artist album:_album
+                          genre:_genre year:_year trackNumber:_trackNumber];
+}
+
+- (void)saveMetadataWithTitle:(NSString *)title
+                       artist:(NSString *)artist
+                        album:(NSString *)album
+                        genre:(NSString *)genre
+                         year:(NSString *)year
+                  trackNumber:(NSUInteger)trackNumber
+{
+    const char *cp = [_filePath fileSystemRepresentation];
+    // readAudioProperties=false — write-only path, skip audio scan for speed
+    TagLib::FileRef fr(cp, false);
+    if (fr.isNull() || !fr.tag()) return;
+    TagLib::Tag *tag = fr.tag();
+    tag->setTitle(nsToTL(title));
+    tag->setArtist(nsToTL(artist));
+    tag->setAlbum(nsToTL(album));
+    tag->setGenre(nsToTL(genre));
+    tag->setYear(year ? (unsigned int)[year intValue] : 0);
+    tag->setTrack((unsigned int)trackNumber);
+    fr.save();
 }
 
 - (NSString *)durationString

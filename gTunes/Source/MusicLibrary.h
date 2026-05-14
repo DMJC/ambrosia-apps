@@ -34,6 +34,7 @@ extern NSString * const MusicLibraryDidChangeNotification;
 - (void)deletePlaylist:(NSString *)name;
 - (void)addTrack:(MusicTrack *)track toPlaylist:(NSString *)name;
 - (void)removeTrack:(MusicTrack *)track fromPlaylist:(NSString *)name;
+- (void)removeTrack:(MusicTrack *)track deleteFile:(BOOL)deleteFile;
 
 - (void)save;
 - (void)load;
