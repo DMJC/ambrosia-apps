@@ -327,20 +327,6 @@
     [self _buildBrowser];
     NSRect browserRect = NSMakeRect(0, splitH - 155, cw - 182, 155);
     [_browserSplit setFrame:browserRect];
-    [self _layoutBrowserColumns];
-    // NSScrollView does not resize its document view; set each table view width
-    // explicitly now that the split has established real scroll view frames.
-    {
-        NSScrollView *svs[] = { _genreScroll, _artistScroll, _albumScroll };
-        NSTableView  *tvs[] = { _genreTable,  _artistTable,  _albumTable  };
-        for (int i = 0; i < 3; i++) {
-            CGFloat w = NSWidth([svs[i] frame]);
-            NSRect tf = [tvs[i] frame];
-            tf.size.width = MAX(w, 60);
-            [tvs[i] setFrame:tf];
-            [[tvs[i] tableColumns][0] setWidth:tf.size.width];
-        }
-    }
     [_contentSplit addSubview:_browserSplit];
 
     // Track list
@@ -442,7 +428,10 @@
     }
     [tv setUsesAlternatingRowBackgroundColors:YES];
     [tv setRowHeight:17];
-    [tv setColumnAutoresizingStyle:NSTableViewUniformColumnAutoresizingStyle];
+    [tv setDrawsGrid:NO];
+    // LastColumnOnly: the single column fills available width as the table resizes.
+    // Uniform style caused a resize→column-resize→notification→resize loop in GNUstep.
+    [tv setColumnAutoresizingStyle:NSTableViewLastColumnOnlyAutoresizingStyle];
     [tv setAutoresizingMask:NSViewWidthSizable];
     return [tv autorelease];
 }
@@ -468,18 +457,21 @@
     [_genreScroll setBorderType:NSBezelBorder];
     [_genreScroll setHasVerticalScroller:YES];
     [_genreScroll setAutohidesScrollers:YES];
+    [[_genreScroll contentView] setAutoresizesSubviews:YES];
     [_genreScroll setDocumentView:_genreTable];
 
     _artistScroll = [[NSScrollView alloc] initWithFrame:NSZeroRect];
     [_artistScroll setBorderType:NSBezelBorder];
     [_artistScroll setHasVerticalScroller:YES];
     [_artistScroll setAutohidesScrollers:YES];
+    [[_artistScroll contentView] setAutoresizesSubviews:YES];
     [_artistScroll setDocumentView:_artistTable];
 
     _albumScroll  = [[NSScrollView alloc] initWithFrame:NSZeroRect];
     [_albumScroll setBorderType:NSBezelBorder];
     [_albumScroll setHasVerticalScroller:YES];
     [_albumScroll setAutohidesScrollers:YES];
+    [[_albumScroll contentView] setAutoresizesSubviews:YES];
     [_albumScroll setDocumentView:_albumTable];
 
     [_browserSplit addSubview:_genreScroll];
@@ -502,25 +494,15 @@
     CGFloat colW = (NSWidth(b) - 2.0 * divider) / 3.0;
     CGFloat h = NSHeight(b);
 
-    NSRect g = NSMakeRect(0, 0, colW, h);
-    NSRect a = NSMakeRect(colW + divider, 0, colW, h);
-    NSRect al = NSMakeRect((colW + divider) * 2.0, 0,
-                           NSWidth(b) - ((colW + divider) * 2.0), h);
-
-    [_genreScroll setFrame:g];
-    [_artistScroll setFrame:a];
-    [_albumScroll setFrame:al];
-
-    NSScrollView *svs[] = { _genreScroll, _artistScroll, _albumScroll };
-    NSTableView  *tvs[] = { _genreTable,  _artistTable,  _albumTable  };
-    for (int i = 0; i < 3; i++) {
-        CGFloat w = NSWidth([svs[i] bounds]);
-        NSRect tf = [tvs[i] frame];
-        tf.size.width = MAX(w, 60);
-        [tvs[i] setFrame:tf];
-        [tvs[i] setDrawsGrid:NO];
-        [[tvs[i] tableColumns][0] setWidth:tf.size.width];
-    }
+    // Only move the scroll views — table view widths and column widths are
+    // handled automatically by NSViewWidthSizable + NSTableViewLastColumnOnlyAutoresizingStyle.
+    // Manually setting table/column widths here fired NSViewFrameDidChangeNotification
+    // which GNUstep's NSSplitView observes on its subviews, causing adjustSubviews to
+    // re-enter and post NSSplitViewDidResizeSubviewsNotification again — infinite loop.
+    [_genreScroll  setFrame:NSMakeRect(0, 0, colW, h)];
+    [_artistScroll setFrame:NSMakeRect(colW + divider, 0, colW, h)];
+    [_albumScroll  setFrame:NSMakeRect((colW + divider) * 2.0, 0,
+                                      NSWidth(b) - (colW + divider) * 2.0, h)];
 }
 
 - (void)_buildTrackList
@@ -530,6 +512,7 @@
     [_trackScroll setHasVerticalScroller:YES];
     [_trackScroll setHasHorizontalScroller:NO];
     [_trackScroll setAutohidesScrollers:YES];
+    [[_trackScroll contentView] setAutoresizesSubviews:YES];
 
     NSArray *colIds = @[@"name",  @"time",  @"artist", @"album",
                         @"genre", @"rating",@"playCount", @"lastPlayed"];
@@ -549,6 +532,7 @@
     [_trackTable setAction:@selector(_clickTrack:)];
     [_trackTable setDoubleAction:@selector(_doubleClickTrack:)];
     [_trackTable setDrawsGrid:NO];
+    [_trackTable setAutoresizingMask:NSViewWidthSizable];
     [_trackTable setTarget:self];
     [_trackScroll setDocumentView:_trackTable];
 
@@ -560,8 +544,12 @@
 
 - (void)splitViewDidResizeSubviews:(NSNotification *)notification
 {
-    if ([notification object] == _contentSplit)
-        [self _layoutBrowserColumns];
+    if ([notification object] != _contentSplit) return;
+    if (_inBrowserLayout) return;   // GNUstep NSSplitView fires this re-entrantly;
+                                    // guard to break the notification loop.
+    _inBrowserLayout = YES;
+    [self _layoutBrowserColumns];
+    _inBrowserLayout = NO;
 }
 
 - (void)sidebarSelectedSection:(NSString *)section

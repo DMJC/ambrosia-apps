@@ -47,6 +47,9 @@
 
     // Current section
     NSString                   *_currentSection;
+
+    // Re-entrance guard for browser column layout (prevents notification loops during resize)
+    BOOL                        _inBrowserLayout;
 }
 
 - (id)init;
