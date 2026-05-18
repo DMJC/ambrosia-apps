@@ -10,7 +10,8 @@
     NSArray        *_sortDescriptors;
     NSString       *_searchString;
 }
-@property (nonatomic, readonly) NSArray *tracks;
+@property (nonatomic, readonly) NSArray *tracks;        // full set (no search filter)
+@property (nonatomic, readonly) NSArray *visibleTracks; // search-filtered set shown in table
 - (void)setTableView:(NSTableView *)tv;
 - (void)setTracks:(NSArray *)tracks;
 - (void)filterBySearchString:(NSString *)s;

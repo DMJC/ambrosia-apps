@@ -78,6 +78,8 @@
     return [_tracks filteredArrayUsingPredicate:p];
 }
 
+- (NSArray *)visibleTracks { return [self _visibleTracks]; }
+
 - (MusicTrack *)trackAtRow:(NSInteger)row
 {
     NSArray *v = [self _visibleTracks];

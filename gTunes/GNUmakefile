@@ -1,3 +1,4 @@
+LIBRARY_COMBO = ng-gnu-gnu
 include $(GNUSTEP_MAKEFILES)/common.make
 
 APP_NAME = gTunes

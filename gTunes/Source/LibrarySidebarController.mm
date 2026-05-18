@@ -15,9 +15,10 @@
 @interface SidebarItem : NSObject
 @property (nonatomic, retain) NSString *title;
 @property (nonatomic, retain) NSString *imageName;
+@property (nonatomic, assign) BOOL isEditable;
 @end
 @implementation SidebarItem
-@synthesize title, imageName;
+@synthesize title, imageName, isEditable;
 - (void)dealloc { [title release]; [imageName release]; [super dealloc]; }
 @end
 
@@ -25,6 +26,14 @@ static SidebarItem *item(NSString *t, NSString *img) {
     SidebarItem *i = [[SidebarItem alloc] init];
     i.title = t; i.imageName = img;
     return [i autorelease];
+}
+
+static NSSet *builtinPlaylistNames() {
+    static NSSet *s = nil;
+    if (!s) s = [[NSSet alloc] initWithObjects:
+        @"gTunes DJ", @"My Top Rated", @"Recently Added",
+        @"Recently Played", @"Top 25 Most Played", @"All", nil];
+    return s;
 }
 
 @implementation LibrarySidebarController
@@ -71,9 +80,13 @@ static SidebarItem *item(NSString *t, NSString *img) {
     [pls.children addObject:item(@"Top 25 Most Played",@"NSPlaylistTemplate")];
     // User playlists from library (skip built-in library playlists shown above)
     NSSet *libraryPlaylists = [NSSet setWithObjects:@"Podcasts", @"Radio", nil];
-    for (NSString *name in [[MusicLibrary sharedLibrary] playlistNames])
-        if (![libraryPlaylists containsObject:name])
-            [pls.children addObject:item(name, @"NSPlaylistTemplate")];
+    for (NSString *name in [[MusicLibrary sharedLibrary] playlistNames]) {
+        if ([libraryPlaylists containsObject:name]) continue;
+        SidebarItem *si = item(name, @"NSPlaylistTemplate");
+        if (![builtinPlaylistNames() containsObject:name])
+            si.isEditable = YES;
+        [pls.children addObject:si];
+    }
     [pls.children addObject:item(@"All", @"NSPlaylistTemplate")];
     [all addObject:pls]; [pls release];
 
@@ -91,6 +104,8 @@ static SidebarItem *item(NSString *t, NSString *img) {
     if ([[_outlineView tableColumns] count] > 0)
         [_outlineView setOutlineTableColumn:
             [[_outlineView tableColumns] objectAtIndex:0]];
+    [_outlineView setTarget:self];
+    [_outlineView setDoubleAction:@selector(_handleDoubleClick:)];
     [_outlineView reloadData];
     // Expand all groups by default
     for (id group in _sections)
@@ -164,6 +179,10 @@ static SidebarItem *item(NSString *t, NSString *img) {
     [tf setEditable:NO]; [tf setSelectable:NO];
     [tf setStringValue:si.title];
     [[tf cell] setFont:[NSFont systemFontOfSize:12]];
+    if (si.isEditable) {
+        [tf setDelegate:self];
+        [cell setTextField:tf];
+    }
     [cell addSubview:tf]; [tf release];
     return [cell autorelease];
 }
@@ -178,6 +197,56 @@ static SidebarItem *item(NSString *t, NSString *img) {
     id item = [_outlineView itemAtRow:[_outlineView selectedRow]];
     if ([item isKindOfClass:[SidebarItem class]])
         [_delegate sidebarSelectedSection:((SidebarItem *)item).title];
+}
+
+- (void)_handleDoubleClick:(id)sender
+{
+    NSInteger row = [_outlineView clickedRow];
+    if (row < 0) return;
+    id anItem = [_outlineView itemAtRow:row];
+    if (![anItem isKindOfClass:[SidebarItem class]]) return;
+    SidebarItem *si = (SidebarItem *)anItem;
+    if (!si.isEditable) return;
+    NSTableCellView *cell = [_outlineView viewAtColumn:0 row:row makeIfNecessary:NO];
+    NSTextField *tf = [cell textField];
+    if (!tf) return;
+    [tf setEditable:YES];
+    [tf setSelectable:YES];
+    [[_outlineView window] makeFirstResponder:tf];
+    [tf selectText:self];
+}
+
+- (void)controlTextDidEndEditing:(NSNotification *)note
+{
+    NSTextField *tf = [note object];
+    NSString *newName = [[tf stringValue]
+        stringByTrimmingCharactersInSet:[NSCharacterSet whitespaceCharacterSet]];
+    [tf setEditable:NO];
+    [tf setSelectable:NO];
+
+    SidebarItem *found = nil;
+    for (NSInteger i = 0; i < [_outlineView numberOfRows]; i++) {
+        id anItem = [_outlineView itemAtRow:i];
+        if (![anItem isKindOfClass:[SidebarItem class]]) continue;
+        SidebarItem *si = (SidebarItem *)anItem;
+        if (!si.isEditable) continue;
+        NSTableCellView *cell = [_outlineView viewAtColumn:0 row:i makeIfNecessary:NO];
+        if ([cell textField] == tf) { found = si; break; }
+    }
+    if (!found) return;
+
+    NSString *oldName = found.title;
+    if ([newName length] == 0 || [newName isEqualToString:oldName]) {
+        [tf setStringValue:oldName];
+        return;
+    }
+
+    [[MusicLibrary sharedLibrary] renamePlaylist:oldName to:newName];
+    found.title = newName;
+    [tf setStringValue:newName];
+
+    if ([_delegate respondsToSelector:@selector(sidebarRenamedPlaylist:to:)])
+        [_delegate sidebarRenamedPlaylist:oldName to:newName];
 }
 
 @end

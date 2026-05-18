@@ -4,6 +4,7 @@
 NSString * const MusicLibraryDidChangeNotification = @"MusicLibraryDidChange";
 
 static NSArray *kSupportedExtensions = nil;
+static NSSet   *kSmartPlaylistNames  = nil;
 
 @implementation MusicLibrary
 
@@ -11,6 +12,9 @@ static NSArray *kSupportedExtensions = nil;
 {
     kSupportedExtensions = [@[@"mp3",@"ogg",@"flac",@"wav",@"m4a",
                                @"alac",@"wma",@"aac",@"ape"] retain];
+    kSmartPlaylistNames  = [[NSSet setWithObjects:
+        @"My Top Rated", @"Recently Added",
+        @"Recently Played", @"Top 25 Most Played", nil] retain];
 }
 
 + (MusicLibrary *)sharedLibrary
@@ -123,6 +127,7 @@ static NSArray *kSupportedExtensions = nil;
                 if (exists) continue;
                 MusicTrack *track = [[MusicTrack alloc] initWithFilePath:full];
                 [track loadMetadata];
+                track.dateAdded = [NSDate date];
                 [found addObject:track];
                 [track release];
             }
@@ -223,8 +228,62 @@ static NSArray *kSupportedExtensions = nil;
 
 - (NSArray *)playlistNames { return [NSArray arrayWithArray:_playlistNames]; }
 
+- (BOOL)isSmartPlaylist:(NSString *)name
+{
+    return [kSmartPlaylistNames containsObject:name];
+}
+
 - (NSArray *)tracksForPlaylist:(NSString *)name
 {
+    // Smart playlists — computed on demand, never stored
+    if ([name isEqualToString:@"My Top Rated"]) {
+        NSMutableArray *result = [NSMutableArray array];
+        @synchronized(_tracks) {
+            for (MusicTrack *t in _tracks)
+                if (t.rating == 5) [result addObject:t];
+        }
+        return result;
+    }
+    if ([name isEqualToString:@"Recently Added"]) {
+        NSArray *sorted;
+        @synchronized(_tracks) {
+            sorted = [_tracks sortedArrayUsingComparator:
+                ^NSComparisonResult(MusicTrack *a, MusicTrack *b) {
+                    NSDate *da = a.dateAdded ?: [NSDate distantPast];
+                    NSDate *db = b.dateAdded ?: [NSDate distantPast];
+                    return [db compare:da];
+                }];
+        }
+        NSUInteger n = MIN(100u, (unsigned)[sorted count]);
+        return [sorted subarrayWithRange:NSMakeRange(0, n)];
+    }
+    if ([name isEqualToString:@"Recently Played"]) {
+        NSMutableArray *played = [NSMutableArray array];
+        @synchronized(_tracks) {
+            for (MusicTrack *t in _tracks)
+                if (t.lastPlayed) [played addObject:t];
+        }
+        [played sortUsingComparator:^NSComparisonResult(MusicTrack *a, MusicTrack *b) {
+            return [b.lastPlayed compare:a.lastPlayed];
+        }];
+        NSUInteger n = MIN(100u, (unsigned)[played count]);
+        return [played subarrayWithRange:NSMakeRange(0, n)];
+    }
+    if ([name isEqualToString:@"Top 25 Most Played"]) {
+        NSArray *sorted;
+        @synchronized(_tracks) {
+            sorted = [_tracks sortedArrayUsingComparator:
+                ^NSComparisonResult(MusicTrack *a, MusicTrack *b) {
+                    if (b.playCount > a.playCount) return NSOrderedDescending;
+                    if (b.playCount < a.playCount) return NSOrderedAscending;
+                    return NSOrderedSame;
+                }];
+        }
+        NSUInteger n = MIN(25u, (unsigned)[sorted count]);
+        return [sorted subarrayWithRange:NSMakeRange(0, n)];
+    }
+
+    // Regular stored playlists
     return [NSArray arrayWithArray:_playlistDict[name] ?: @[]];
 }
 
@@ -244,6 +303,19 @@ static NSArray *kSupportedExtensions = nil;
     [_playlistNames removeObject:name];
     [[NSNotificationCenter defaultCenter]
         postNotificationName:MusicLibraryDidChangeNotification object:self];
+}
+
+- (void)renamePlaylist:(NSString *)oldName to:(NSString *)newName
+{
+    if (!oldName || !newName || [oldName isEqualToString:newName]) return;
+    NSMutableArray *tracks = _playlistDict[oldName];
+    if (!tracks || _playlistDict[newName]) return;
+    [_playlistDict removeObjectForKey:oldName];
+    _playlistDict[newName] = tracks;
+    NSUInteger idx = [_playlistNames indexOfObject:oldName];
+    if (idx != NSNotFound)
+        [_playlistNames replaceObjectAtIndex:idx withObject:newName];
+    [self save];
 }
 
 - (void)addTrack:(MusicTrack *)track toPlaylist:(NSString *)name
@@ -316,6 +388,7 @@ static NSArray *kSupportedExtensions = nil;
                 @"playCount"  : @(t.playCount),
                 @"rating"     : @(t.rating),
                 @"lastPlayed" : t.lastPlayed ?: [NSDate dateWithTimeIntervalSince1970:0],
+                @"dateAdded"  : t.dateAdded  ?: [NSDate date],
                 @"artHash"    : artHash,
             }];
         }
@@ -375,6 +448,10 @@ static NSArray *kSupportedExtensions = nil;
         id lp = d[@"lastPlayed"];
         if ([lp isKindOfClass:[NSDate class]] && [lp timeIntervalSince1970] > 0)
             t.lastPlayed = lp;
+
+        id da = d[@"dateAdded"];
+        t.dateAdded = ([da isKindOfClass:[NSDate class]] && [da timeIntervalSince1970] > 0)
+            ? da : [NSDate date];
 
         // Resolve art: new format uses artHash ref, old format has inline artData.
         NSData *artData = nil;

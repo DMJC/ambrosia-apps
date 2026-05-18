@@ -14,4 +14,8 @@ extern NSString * const GTunesMusicLibraryPathKey;
 /// YES after the user has explicitly set (or confirmed) the library path.
 @property (nonatomic, assign) BOOL hasConfiguredLibrary;
 
+/// Playback settings persisted to gTunes.plist via NSUserDefaults.
+@property (nonatomic, assign) BOOL shuffle;
+@property (nonatomic, assign) BOOL repeat;
+
 @end

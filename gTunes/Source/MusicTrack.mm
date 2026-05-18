@@ -29,6 +29,7 @@
 @synthesize duration    = _duration;
 @synthesize playCount   = _playCount;
 @synthesize lastPlayed  = _lastPlayed;
+@synthesize dateAdded   = _dateAdded;
 @synthesize rating      = _rating;
 @synthesize albumArt    = _albumArt;
 @synthesize artData     = _artData;
@@ -63,6 +64,7 @@
     [_genre      release];
     [_year       release];
     [_lastPlayed release];
+    [_dateAdded  release];
     [_albumArt   release];
     [_artData    release];
     [super dealloc];

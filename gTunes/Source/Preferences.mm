@@ -2,6 +2,8 @@
 
 NSString * const GTunesMusicLibraryPathKey = @"GTunesMusicLibraryPath";
 static NSString * const kHasConfiguredLibraryKey = @"GTunesHasConfiguredLibrary";
+static NSString * const kShuffleKey               = @"GTunesShuffleEnabled";
+static NSString * const kRepeatKey                = @"GTunesRepeatEnabled";
 
 @implementation Preferences
 
@@ -22,6 +24,8 @@ static NSString * const kHasConfiguredLibraryKey = @"GTunesHasConfiguredLibrary"
         [[NSUserDefaults standardUserDefaults] registerDefaults:@{
             GTunesMusicLibraryPathKey : defaultPath,
             kHasConfiguredLibraryKey  : @NO,
+            kShuffleKey               : @NO,
+            kRepeatKey                : @NO,
         }];
     }
     return self;
@@ -50,6 +54,28 @@ static NSString * const kHasConfiguredLibraryKey = @"GTunesHasConfiguredLibrary"
 {
     [[NSUserDefaults standardUserDefaults]
         setBool:flag forKey:kHasConfiguredLibraryKey];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+}
+
+- (BOOL)shuffle
+{
+    return [[NSUserDefaults standardUserDefaults] boolForKey:kShuffleKey];
+}
+
+- (void)setShuffle:(BOOL)flag
+{
+    [[NSUserDefaults standardUserDefaults] setBool:flag forKey:kShuffleKey];
+    [[NSUserDefaults standardUserDefaults] synchronize];
+}
+
+- (BOOL)repeat
+{
+    return [[NSUserDefaults standardUserDefaults] boolForKey:kRepeatKey];
+}
+
+- (void)setRepeat:(BOOL)flag
+{
+    [[NSUserDefaults standardUserDefaults] setBool:flag forKey:kRepeatKey];
     [[NSUserDefaults standardUserDefaults] synchronize];
 }
 

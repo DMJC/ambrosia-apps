@@ -43,6 +43,10 @@
 
     // ── Status bar ──
     NSTextField                *_statusBar;
+    NSButton                   *_newPlaylistBtn;
+    NSButton                   *_shuffleBtn;
+    NSButton                   *_repeatBtn;
+//    NSButton                   *_ejectBtn; //not used currently
 
     // ── Search ──
     NSSearchField              *_searchField;

@@ -29,9 +29,11 @@ extern NSString * const MusicLibraryDidChangeNotification;
 - (NSArray *)albumsForArtist:(NSString *)artist;
 
 - (NSArray *)playlistNames;
+- (BOOL)isSmartPlaylist:(NSString *)name;
 - (NSArray *)tracksForPlaylist:(NSString *)name;
 - (void)createPlaylist:(NSString *)name;
 - (void)deletePlaylist:(NSString *)name;
+- (void)renamePlaylist:(NSString *)oldName to:(NSString *)newName;
 - (void)addTrack:(MusicTrack *)track toPlaylist:(NSString *)name;
 - (void)removeTrack:(MusicTrack *)track fromPlaylist:(NSString *)name;
 - (void)removeTrack:(MusicTrack *)track deleteFile:(BOOL)deleteFile;

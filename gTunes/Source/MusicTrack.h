@@ -16,6 +16,7 @@
     NSInteger      _rating;      // 0–5
     NSImage       *_albumArt;
     NSData        *_artData;        // raw JPEG/PNG bytes – used for plist persistence
+    NSDate            *_dateAdded;   // when the track was added to the library
     BOOL               _metadataLoaded;
     unsigned long long _fileSize;   // cached so status bar avoids per-track stat() calls
 }
@@ -30,6 +31,7 @@
 @property (nonatomic, assign) NSTimeInterval duration;
 @property (nonatomic, assign) NSUInteger     playCount;
 @property (nonatomic, retain) NSDate        *lastPlayed;
+@property (nonatomic, retain) NSDate        *dateAdded;
 @property (nonatomic, assign) NSInteger      rating;
 @property (nonatomic, retain) NSImage       *albumArt;
 @property (nonatomic, retain) NSData        *artData;

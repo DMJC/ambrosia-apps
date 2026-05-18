@@ -1,4 +1,5 @@
 #import "AudioPlayer.h"
+#import <AppKit/NSApplication.h>
 #include <gst/gst.h>
 
 NSString * const AudioPlayerTrackChangedNotification = @"AudioPlayerTrackChanged";
@@ -106,16 +107,16 @@ NSString * const AudioPlayerProgressNotification     = @"AudioPlayerProgress";
     _state = AudioPlayerStatePlaying;
 
     if (!_progressTimer) {
-        // NSRunLoopCommonModes ensures the timer fires even while the user is
-        // dragging a scrollbar, slider, or split-view divider (those push
-        // NSEventTrackingRunLoopMode which suppresses NSDefaultRunLoopMode timers).
-        // Without this the GStreamer bus goes un-drained during UI interactions,
-        // so EOS is missed and the next track never starts until the drag ends.
-        _progressTimer = [[NSTimer timerWithTimeInterval:0.5
+        // scheduledTimerWithTimeInterval: adds to NSDefaultRunLoopMode on the
+        // main run loop.  We also add it to NSEventTrackingRunLoopMode so the
+        // bus is still drained (and EOS still detected) while the user drags
+        // a slider or split-view divider.  Using NSRunLoopCommonModes directly
+        // is unreliable on GNUstep and can result in the timer never firing.
+        _progressTimer = [[NSTimer scheduledTimerWithTimeInterval:0.5
             target:self selector:@selector(_pollProgress:)
             userInfo:nil repeats:YES] retain];
         [[NSRunLoop mainRunLoop] addTimer:_progressTimer
-                                  forMode:NSRunLoopCommonModes];
+                                  forMode:NSEventTrackingRunLoopMode];
     }
 
     [[NSNotificationCenter defaultCenter]

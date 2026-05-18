@@ -89,7 +89,9 @@
 - (void)_trackChanged:(NSNotification *)note;
 - (void)_updateStatusBar;
 // Controls
+- (void)toggleShuffle:(id)sender;
 - (void)_toggleShuffle:(id)sender;
+- (void)toggleRepeat:(id)sender;
 - (void)_cycleRepeat:(id)sender;
 - (void)_volumeUp:(id)sender;
 - (void)_volumeDown:(id)sender;
@@ -346,7 +348,7 @@
 
     // ── Search field (top right, beside toolbar) ──
     _searchField = [[NSSearchField alloc]
-        initWithFrame:NSMakeRect(cw - 170, ch - 54, 160, 22)];
+        initWithFrame:NSMakeRect(cw - 170, ch - 54, 160, 24)];
     [_searchField setAutoresizingMask:NSViewMinXMargin | NSViewMinYMargin];
     [[_searchField cell] setPlaceholderString:@"Search"];
     [_searchField setContinuous:YES];
@@ -356,16 +358,64 @@
 
     // ── Status bar (bottom, 20px) ──
     [self _buildStatusBar];
-    NSRect sbRect = NSMakeRect(0, 0, cw, 22);
+    NSRect sbRect = NSMakeRect(0, 0, cw, 30);
     [_statusBar setFrame:sbRect];
     [_statusBar setAutoresizingMask:NSViewWidthSizable | NSViewMaxYMargin];
+    
+    CGFloat bW = 36.0, bH = 24.0, gap = 0.0;
+    // New Playlist button (leftmost)
+    _newPlaylistBtn = [[NSButton alloc] initWithFrame:
+    NSMakeRect(0, 6, bW, bH)];
+    [_newPlaylistBtn setButtonType:NSMomentaryPushInButton];
+    [_newPlaylistBtn setBordered:YES];
+    [_newPlaylistBtn setTitle:@"+"];
+//    [_newPlaylistBtn setImage:[NSImage imageNamed:@"new-playlist"]];
+    [_newPlaylistBtn setTarget:self];
+    [_newPlaylistBtn setAction:@selector(newPlaylist:)];
+    [_newPlaylistBtn setAutoresizingMask:NSViewMaxXMargin | NSViewMaxYMargin];
+    [_statusBar addSubview:_newPlaylistBtn];
+
+    // Shuffle button
+    _shuffleBtn = [[NSButton alloc] initWithFrame:
+    NSMakeRect(0 + bW + gap, 6, bW, bH)];
+    [_shuffleBtn setButtonType:NSPushOnPushOffButton]; // toggleable
+    [_shuffleBtn setBordered:YES];
+    [_shuffleBtn    setTitle:@"⇄"];
+//    [_shuffleBtn setImage:[NSImage imageNamed:@"shuffle"]];
+    [_shuffleBtn setTarget:self];
+    [_shuffleBtn setAction:@selector(toggleShuffle:)];
+    [_shuffleBtn setAutoresizingMask:NSViewMaxXMargin | NSViewMaxYMargin];
+    [_statusBar addSubview:_shuffleBtn];
+
+    // Repeat button
+    _repeatBtn = [[NSButton alloc] initWithFrame:
+    NSMakeRect(0 + (bW + gap) * 2, 6, bW, bH)];
+    [_repeatBtn setButtonType:NSPushOnPushOffButton]; // toggleable
+    [_repeatBtn setBordered:YES];
+    [_repeatBtn     setTitle:@"↺"];
+//    [_repeatBtn setImage:[NSImage imageNamed:@"repeat"]];
+    [_repeatBtn setTarget:self];
+    [_repeatBtn setAction:@selector(toggleRepeat:)];
+    [_repeatBtn setAutoresizingMask:NSViewMaxXMargin | NSViewMaxYMargin];
+    [_statusBar addSubview:_repeatBtn];
+
+    // Restore persisted shuffle/repeat state
+    {
+        Preferences *prefs = [Preferences sharedPreferences];
+        AudioPlayer *p = [AudioPlayer sharedPlayer];
+        p.shuffle = prefs.shuffle;
+        [_shuffleBtn setState:prefs.shuffle ? NSOnState : NSOffState];
+        p.repeatMode = prefs.repeat ? RepeatModeAll : RepeatModeNone;
+        [_repeatBtn setState:prefs.repeat ? NSOnState : NSOffState];
+    }
+
     [content addSubview:_statusBar];
 
     // ── Main horizontal split: sidebar (200px) | content ──
     CGFloat splitTop = ch - 62;
-    CGFloat splitH   = splitTop - 22;
+    CGFloat splitH   = splitTop - 24;
     _mainSplit = [[NSSplitView alloc]
-        initWithFrame:NSMakeRect(0, 22, cw, splitH)];
+        initWithFrame:NSMakeRect(0, 24, cw, splitH)];
     [_mainSplit setDividerStyle:NSSplitViewDividerStyleThin];
     [_mainSplit setVertical:YES];
     [_mainSplit setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
@@ -633,6 +683,14 @@
     [_browserCtrl reload];
 }
 
+- (void)sidebarRenamedPlaylist:(NSString *)oldName to:(NSString *)newName
+{
+    if ([_currentSection isEqualToString:oldName]) {
+        [_currentSection release];
+        _currentSection = [newName retain];
+    }
+}
+
 - (void)browserSelectionChangedWithGenre:(NSString *)genre
                                   artist:(NSString *)artist
                                    album:(NSString *)album
@@ -653,6 +711,8 @@
 
     if ([section isEqualToString:@"Music"] || section == nil) {
         tracks = [lib allTracks];
+    } else if ([lib isSmartPlaylist:section]) {
+        tracks = [lib tracksForPlaylist:section];
     } else if ([lib.playlistNames containsObject:section]) {
         tracks = [lib tracksForPlaylist:section];
     } else {
@@ -698,7 +758,7 @@
     if (!t) return;
     // Build queue from visible tracks
     [[AudioPlayer sharedPlayer] playTrack:t
-                                withQueue:[_trackCtrl tracks]];
+                                withQueue:[_trackCtrl visibleTracks]];
 }
 
 - (void)_addMusicFolder:(id)sender
@@ -742,7 +802,7 @@
     if (row < 0) return;
     MusicTrack *t = [_trackCtrl trackAtRow:row];
     if (!t) return;
-    [[AudioPlayer sharedPlayer] playTrack:t withQueue:[_trackCtrl tracks]];
+    [[AudioPlayer sharedPlayer] playTrack:t withQueue:[_trackCtrl visibleTracks]];
 }
 - (void)_next:(id)sender     { [[AudioPlayer sharedPlayer] next]; }
 - (void)_previous:(id)sender { [[AudioPlayer sharedPlayer] previous]; }
@@ -755,17 +815,26 @@
 
 // ── Controls extras ──
 
-- (void)_toggleShuffle:(id)sender
+- (void)toggleShuffle:(id)sender
 {
     AudioPlayer *p = [AudioPlayer sharedPlayer];
     p.shuffle = !p.shuffle;
+    [[Preferences sharedPreferences] setShuffle:p.shuffle];
+    [_shuffleBtn setState:p.shuffle ? NSOnState : NSOffState];
 }
 
-- (void)_cycleRepeat:(id)sender
+- (void)_toggleShuffle:(id)sender { [self toggleShuffle:sender]; }
+
+- (void)toggleRepeat:(id)sender
 {
     AudioPlayer *p = [AudioPlayer sharedPlayer];
-    p.repeatMode = (RepeatMode)((p.repeatMode + 1) % 3);
+    BOOL nowOn = (p.repeatMode == RepeatModeNone);
+    p.repeatMode = nowOn ? RepeatModeAll : RepeatModeNone;
+    [[Preferences sharedPreferences] setRepeat:nowOn];
+    [_repeatBtn setState:nowOn ? NSOnState : NSOffState];
 }
+
+- (void)_cycleRepeat:(id)sender { [self toggleRepeat:sender]; }
 
 - (void)_volumeUp:(id)sender
 {
@@ -874,6 +943,15 @@
 {
     MusicTrack *t = [AudioPlayer sharedPlayer].currentTrack;
     [_sidebarArtView setImage:t.albumArt];
+
+    if (t) {
+        NSUInteger idx = [[_trackCtrl visibleTracks] indexOfObject:t];
+        if (idx != NSNotFound) {
+            [_trackTable selectRowIndexes:[NSIndexSet indexSetWithIndex:idx]
+                     byExtendingSelection:NO];
+            [_trackTable scrollRowToVisible:(NSInteger)idx];
+        }
+    }
 }
 
 - (void)_libraryChanged:(NSNotification *)note
@@ -955,14 +1033,18 @@
     if (!_addToPlaylistItem) return;
     NSMenu *sub = [_addToPlaylistItem submenu];
     [sub removeAllItems];
+    NSSet *excluded = [NSSet setWithObjects:@"Podcasts", @"Radio", nil];
     NSArray *names = [[MusicLibrary sharedLibrary] playlistNames];
+    NSUInteger added = 0;
     for (NSString *name in names) {
+        if ([excluded containsObject:name]) continue;
         NSMenuItem *it = [sub addItemWithTitle:name
             action:@selector(_addToPlaylistAction:) keyEquivalent:@""];
         [it setTarget:self];
         [it setRepresentedObject:name];
+        added++;
     }
-    if ([names count] == 0) {
+    if (added == 0) {
         NSMenuItem *none = [sub addItemWithTitle:@"No Playlists"
             action:nil keyEquivalent:@""];
         [none setEnabled:NO];
