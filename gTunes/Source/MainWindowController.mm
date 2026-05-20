@@ -384,7 +384,7 @@
     [_searchField setDelegate:(id)self];
     [content addSubview:_searchField];
 
-    // ── Status bar (bottom, 20px) ──
+    // ── Status bar (bottom, 34px) ──
     [self _buildStatusBar];
     NSRect sbRect = NSMakeRect(0, 0, cw, 34);
     [_statusBar setFrame:sbRect];
@@ -454,7 +454,7 @@
     static const CGFloat kArtH = 180.0;
     NSRect sideRect = NSMakeRect(0, 0, 180, splitH);
     [_sidebarContainer setFrame:sideRect];
-    [_sidebarArtView   setFrame:NSMakeRect(0, 0, 180, kArtH)];
+    [_sidebarArtView   setFrame:NSMakeRect(2, 0, 180, kArtH)];
     [_sidebarScroll    setFrame:NSMakeRect(0, kArtH, 180, splitH - kArtH)];
     [_mainSplit addSubview:_sidebarContainer];
 
@@ -482,7 +482,7 @@
     [content addSubview:_mainSplit];
 
     // Set initial split positions
-    [_mainSplit setPosition:180 ofDividerAtIndex:0];
+    [_mainSplit setPosition:160 ofDividerAtIndex:0];
     [_mainSplit adjustSubviews];
 
     // Apply browser/track split after the split views have their final bounds.
