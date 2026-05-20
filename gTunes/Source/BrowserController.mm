@@ -1,6 +1,27 @@
 // BrowserController.mm
 #import "BrowserController.h"
 #import "MusicLibrary.h"
+#import "MusicTrack.h"
+
+// Returns sorted unique non-empty string values for `key` across `tracks`.
+static NSArray *uniqueSortedValues(NSArray *tracks, NSString *key)
+{
+    NSMutableSet *set = [NSMutableSet setWithCapacity:[tracks count]];
+    for (MusicTrack *t in tracks) {
+        NSString *val = [t valueForKey:key];
+        if ([val length]) [set addObject:val];
+    }
+    return [[set allObjects]
+        sortedArrayUsingSelector:@selector(caseInsensitiveCompare:)];
+}
+
+@interface BrowserController ()
+{
+    NSArray *_baseTracks;   // tracks for the current section (nil = whole library)
+}
+- (void)_rebuildLists;
+- (NSArray *)_tracksForGenre:(NSString *)genre artist:(NSString *)artist;
+@end
 
 @implementation BrowserController
 @synthesize delegate = _delegate;
@@ -20,6 +41,7 @@
 {
     [_genres  release]; [_artists release]; [_albums  release];
     [_selectedGenre  release]; [_selectedArtist release]; [_selectedAlbum  release];
+    [_baseTracks release];
     [super dealloc];
 }
 
@@ -32,30 +54,77 @@
     [self reload];
 }
 
+// Rebuild lists using the current _baseTracks (or all library data when nil).
 - (void)reload
 {
-    MusicLibrary *lib = [MusicLibrary sharedLibrary];
+    [self _rebuildLists];
+}
+
+// Set a new base track set and rebuild.  Resets all column selections.
+- (void)reloadWithTracks:(NSArray *)tracks
+{
+    [_baseTracks release];
+    _baseTracks = [tracks retain];
+    [self _rebuildLists];
+}
+
+// ── Private ──
+
+- (void)_rebuildLists
+{
+    NSArray *genres, *artists, *albums;
+
+    if (_baseTracks) {
+        genres  = uniqueSortedValues(_baseTracks, @"genre");
+        artists = uniqueSortedValues(_baseTracks, @"artist");
+        albums  = uniqueSortedValues(_baseTracks, @"album");
+    } else {
+        MusicLibrary *lib = [MusicLibrary sharedLibrary];
+        genres  = [lib allGenres];
+        artists = [lib allArtists];
+        albums  = [lib allAlbums];
+    }
+
     NSMutableArray *g = [NSMutableArray arrayWithObject:
         [NSString stringWithFormat:@"All (%lu Genres)",
-            (unsigned long)[[lib allGenres] count]]];
-    [g addObjectsFromArray:[lib allGenres]];
+            (unsigned long)[genres count]]];
+    [g addObjectsFromArray:genres];
     [_genres release]; _genres = [g retain];
 
     NSMutableArray *ar = [NSMutableArray arrayWithObject:
         [NSString stringWithFormat:@"All (%lu Artists)",
-            (unsigned long)[[lib allArtists] count]]];
-    [ar addObjectsFromArray:[lib allArtists]];
+            (unsigned long)[artists count]]];
+    [ar addObjectsFromArray:artists];
     [_artists release]; _artists = [ar retain];
 
     NSMutableArray *al = [NSMutableArray arrayWithObject:
         [NSString stringWithFormat:@"All (%lu Albums)",
-            (unsigned long)[[lib allAlbums] count]]];
-    [al addObjectsFromArray:[lib allAlbums]];
+            (unsigned long)[albums count]]];
+    [al addObjectsFromArray:albums];
     [_albums release]; _albums = [al retain];
+
+    [_selectedGenre  release]; _selectedGenre  = nil;
+    [_selectedArtist release]; _selectedArtist = nil;
+    [_selectedAlbum  release]; _selectedAlbum  = nil;
 
     [_genreTable  reloadData];
     [_artistTable reloadData];
     [_albumTable  reloadData];
+}
+
+// Returns _baseTracks filtered by the given genre and/or artist.
+// Passing nil for either skips that filter.
+- (NSArray *)_tracksForGenre:(NSString *)genre artist:(NSString *)artist
+{
+    NSArray *tracks = _baseTracks
+        ?: [[MusicLibrary sharedLibrary] allTracks];
+    if (genre)
+        tracks = [tracks filteredArrayUsingPredicate:
+            [NSPredicate predicateWithFormat:@"genre ==[c] %@", genre]];
+    if (artist)
+        tracks = [tracks filteredArrayUsingPredicate:
+            [NSPredicate predicateWithFormat:@"artist ==[c] %@", artist]];
+    return tracks;
 }
 
 // ── NSTableViewDataSource ──
@@ -89,20 +158,13 @@
     NSInteger row = [tv selectedRow];
     if (row < 0) { _updating = NO; return; }
 
-    MusicLibrary *lib = [MusicLibrary sharedLibrary];
-
     if (tv == _genreTable) {
         [_selectedGenre release];
         _selectedGenre = row == 0 ? nil : [_genres[row] retain];
-        // Refresh artists filtered by genre
-        NSArray *artists;
-        if (_selectedGenre) {
-            NSArray *tracks = [lib tracksForGenre:_selectedGenre];
-            NSMutableSet *set = [NSMutableSet set];
-            for (MusicTrack *t in tracks) [set addObject:t.artist];
-            artists = [[set allObjects]
-                sortedArrayUsingSelector:@selector(caseInsensitiveCompare:)];
-        } else artists = [lib allArtists];
+
+        // Artists scoped to selected genre (within base tracks)
+        NSArray *filteredByGenre = [self _tracksForGenre:_selectedGenre artist:nil];
+        NSArray *artists = uniqueSortedValues(filteredByGenre, @"artist");
         NSMutableArray *ar = [NSMutableArray arrayWithObject:
             [NSString stringWithFormat:@"All (%lu Artists)",
                 (unsigned long)[artists count]]];
@@ -111,12 +173,13 @@
         [_artistTable reloadData];
         [_artistTable deselectAll:nil];
         [_selectedArtist release]; _selectedArtist = nil;
-        // Reset album table to match the genre change
-        NSArray *allAlbums = [lib allAlbums];
+
+        // Albums scoped to selected genre (within base tracks)
+        NSArray *albums = uniqueSortedValues(filteredByGenre, @"album");
         NSMutableArray *al = [NSMutableArray arrayWithObject:
             [NSString stringWithFormat:@"All (%lu Albums)",
-                (unsigned long)[allAlbums count]]];
-        [al addObjectsFromArray:allAlbums];
+                (unsigned long)[albums count]]];
+        [al addObjectsFromArray:albums];
         [_albums release]; _albums = [al retain];
         [_albumTable reloadData];
         [_albumTable deselectAll:nil];
@@ -125,10 +188,10 @@
     else if (tv == _artistTable) {
         [_selectedArtist release];
         _selectedArtist = row == 0 ? nil : [_artists[row] retain];
-        NSArray *albums;
-        if (_selectedArtist)
-            albums = [lib albumsForArtist:_selectedArtist];
-        else albums = [lib allAlbums];
+
+        // Albums scoped to selected genre + artist (within base tracks)
+        NSArray *filtered = [self _tracksForGenre:_selectedGenre artist:_selectedArtist];
+        NSArray *albums = uniqueSortedValues(filtered, @"album");
         NSMutableArray *al = [NSMutableArray arrayWithObject:
             [NSString stringWithFormat:@"All (%lu Albums)",
                 (unsigned long)[albums count]]];

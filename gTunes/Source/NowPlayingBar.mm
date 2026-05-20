@@ -2,12 +2,14 @@
 #import "NowPlayingBar.h"
 #import "AudioPlayer.h"
 #import "MusicTrack.h"
+#import <GNUstepGUI/GSTheme.h>
 
 // X coordinate where the dynamic info area begins (right of vol-high icon + gap)
 static const CGFloat kInfoX = 316.0;
 
 @interface NowPlayingBar ()
 - (void)_layout;
+- (void)_applyPlayPauseTitle:(BOOL)playing;
 @end
 
 @implementation NowPlayingBar
@@ -31,8 +33,8 @@ static const CGFloat kInfoX = 316.0;
     _playPauseBtn = [[NSButton alloc]
         initWithFrame:NSMakeRect(tx + bw + 4, (60 - 36) / 2.0, 36, 36)];
     [_playPauseBtn setBezelStyle:NSCircularBezelStyle];
-    [_playPauseBtn setTitle:@"▶"];
     [_playPauseBtn setTarget:self]; [_playPauseBtn setAction:@selector(_playPause:)];
+    [self _applyPlayPauseTitle:NO];
     [self addSubview:_playPauseBtn];
 
     _nextBtn = [[NSButton alloc]
@@ -180,9 +182,13 @@ static const CGFloat kInfoX = 316.0;
 
 - (void)drawRect:(NSRect)r
 {
-    NSGradient *grad = [[NSGradient alloc]
-        initWithStartingColor:[NSColor colorWithCalibratedWhite:0.88 alpha:1.0]
-                  endingColor:[NSColor colorWithCalibratedWhite:0.76 alpha:1.0]];
+    GSTheme *theme = [GSTheme theme];
+    NSColor *c1 = [theme colorNamed:@"titleBarGradient1" state:GSThemeNormalState];
+    NSColor *c2 = [theme colorNamed:@"titleBarGradient2" state:GSThemeNormalState];
+    if (!c1) c1 = [NSColor colorWithCalibratedWhite:0.88 alpha:1.0];
+    if (!c2) c2 = [NSColor colorWithCalibratedWhite:0.76 alpha:1.0];
+
+    NSGradient *grad = [[NSGradient alloc] initWithStartingColor:c1 endingColor:c2];
     [grad drawInRect:r angle:270];
     [grad release];
     [[NSColor colorWithCalibratedWhite:0.55 alpha:1.0] set];
@@ -199,7 +205,7 @@ static const CGFloat kInfoX = 316.0;
     [_artistLabel setStringValue:t ? (t.artist ?: @"") : @""];
 
     BOOL playing = (p.state == AudioPlayerStatePlaying);
-    [_playPauseBtn setTitle:playing ? @"⏸" : @"▶"];
+    [self _applyPlayPauseTitle:playing];
 
     if (!_draggingProgress)
         [_progressSlider setDoubleValue:p.progress];
@@ -212,6 +218,26 @@ static const CGFloat kInfoX = 316.0;
     [_timeLeftLabel setStringValue:[NSString stringWithFormat:@"-%lu:%02lu",
         (unsigned long)(rem / 60), (unsigned long)((NSUInteger)rem % 60)]];
 
+}
+
+- (void)_applyPlayPauseTitle:(BOOL)playing
+{
+    NSString *sym  = playing ? @"⏸" : @"▶";
+    CGFloat   size = playing ? 20.0  : 14.0;
+
+    NSMutableParagraphStyle *para = [[NSMutableParagraphStyle alloc] init];
+    [para setAlignment:NSCenterTextAlignment];
+
+    NSDictionary *attrs = @{
+        NSFontAttributeName:           [NSFont systemFontOfSize:size],
+        NSParagraphStyleAttributeName: para
+    };
+
+    NSAttributedString *as = [[NSAttributedString alloc]
+        initWithString:sym attributes:attrs];
+    [_playPauseBtn setAttributedTitle:as];
+    [as release];
+    [para release];
 }
 
 - (void)_playPause:(id)s

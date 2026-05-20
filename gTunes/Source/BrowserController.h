@@ -25,4 +25,5 @@
           artistTable:(NSTableView *)a
            albumTable:(NSTableView *)al;
 - (void)reload;
+- (void)reloadWithTracks:(NSArray *)tracks;
 @end

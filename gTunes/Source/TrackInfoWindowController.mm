@@ -261,30 +261,15 @@ static NSString *commonStringForKey(NSArray *tracks, NSString *key)
     [self close];
 }
 
-// Sync to Files: write current field values to the actual audio file tags using
-// TagLib.  Does NOT modify the stored MusicTrack properties or close the window.
-// The library is saved so play counts and any other in-flight changes persist.
+// Sync to Files: apply field values to the MusicTrack objects in memory,
+// write those values to each audio file via TagLib, then persist the library
+// so gTunes.plist reflects the changes.  Window stays open.
 - (void)_syncToFiles:(id)sender
 {
-    NSString *title   = [_titleField    isEnabled] ? [_titleField    stringValue] : nil;
-    NSString *artist  = [_artistField   isEnabled] ? [_artistField   stringValue] : nil;
-    NSString *album   = [_albumField    isEnabled] ? [_albumField    stringValue] : nil;
-    NSString *genre   = [_genreField    isEnabled] ? [_genreField    stringValue] : nil;
-    NSString *year    = [_yearField     isEnabled] ? [_yearField     stringValue] : nil;
-    BOOL     trackEnabled = [_trackNumField isEnabled];
-    NSUInteger trackNum = trackEnabled
-        ? (NSUInteger)[[_trackNumField stringValue] integerValue] : 0;
-
-    for (MusicTrack *t in _tracks) {
-        [t saveMetadataWithTitle:  title  ?: t.title
-                          artist: artist ?: t.artist
-                           album: album  ?: t.album
-                           genre: genre  ?: t.genre
-                            year: year   ?: t.year
-                     trackNumber: trackEnabled ? trackNum : t.trackNumber];
-    }
+    [self _applyEnabledFieldsToTracks:_tracks];
+    for (MusicTrack *t in _tracks)
+        [t saveMetadata];
     [[MusicLibrary sharedLibrary] save];
-    // Window stays open so the user can continue editing or click OK.
 }
 
 @end

@@ -3,6 +3,7 @@
 #import "MusicLibrary.h"
 #import "AudioPlayer.h"
 #import "Preferences.h"
+#import <GNUstepGUI/GSTheme.h>
 
 @interface StatusBarCell : NSTextFieldCell
 @end
@@ -10,8 +11,35 @@
 - (NSRect)drawingRectForBounds:(NSRect)theRect
 {
     NSRect r = [super drawingRectForBounds:theRect];
-    r.origin.y += 5;
+    CGFloat textH = [[self attributedStringValue] size].height;
+    if (textH > 0 && textH < NSHeight(r))
+        r.origin.y += floor((NSHeight(r) - textH) / 2.0);
     return r;
+}
+@end
+
+@interface StatusBarView : NSView
+@end
+@implementation StatusBarView
+- (void)drawRect:(NSRect)r
+{
+    GSTheme *theme = [GSTheme theme];
+    NSColor *c1 = [theme colorNamed:@"statusBarGradient1" state:GSThemeNormalState];
+    NSColor *c2 = [theme colorNamed:@"statusBarGradient2" state:GSThemeNormalState];
+    if (!c1) c1 = [NSColor colorWithCalibratedWhite:0.88 alpha:1.0];
+    if (!c2) c2 = [NSColor colorWithCalibratedWhite:0.78 alpha:1.0];
+
+    CGFloat midY = floor(NSMidY(r));
+    NSRect topHalf = NSMakeRect(r.origin.x, midY, NSWidth(r), NSMaxY(r) - midY);
+    NSRect botHalf = NSMakeRect(r.origin.x, r.origin.y, NSWidth(r), midY - r.origin.y);
+
+    NSGradient *g1 = [[NSGradient alloc] initWithStartingColor:c1 endingColor:c2];
+    [g1 drawInRect:topHalf angle:270];
+    [g1 release];
+
+    NSGradient *g2 = [[NSGradient alloc] initWithStartingColor:c2 endingColor:c1];
+    [g2 drawInRect:botHalf angle:270];
+    [g2 release];
 }
 @end
 
@@ -358,14 +386,15 @@
 
     // ── Status bar (bottom, 20px) ──
     [self _buildStatusBar];
-    NSRect sbRect = NSMakeRect(0, 0, cw, 30);
+    NSRect sbRect = NSMakeRect(0, 0, cw, 34);
     [_statusBar setFrame:sbRect];
     [_statusBar setAutoresizingMask:NSViewWidthSizable | NSViewMaxYMargin];
+    [_statusLabel setFrame:[_statusBar bounds]];
     
     CGFloat bW = 36.0, bH = 24.0, gap = 0.0;
     // New Playlist button (leftmost)
     _newPlaylistBtn = [[NSButton alloc] initWithFrame:
-    NSMakeRect(0, 6, bW, bH)];
+    NSMakeRect(3, 3, bW, bH)];
     [_newPlaylistBtn setButtonType:NSMomentaryPushInButton];
     [_newPlaylistBtn setBordered:YES];
     [_newPlaylistBtn setTitle:@"+"];
@@ -377,7 +406,7 @@
 
     // Shuffle button
     _shuffleBtn = [[NSButton alloc] initWithFrame:
-    NSMakeRect(0 + bW + gap, 6, bW, bH)];
+    NSMakeRect(3 + bW + gap, 3, bW, bH)];
     [_shuffleBtn setButtonType:NSPushOnPushOffButton]; // toggleable
     [_shuffleBtn setBordered:YES];
     [_shuffleBtn    setTitle:@"⇄"];
@@ -389,7 +418,7 @@
 
     // Repeat button
     _repeatBtn = [[NSButton alloc] initWithFrame:
-    NSMakeRect(0 + (bW + gap) * 2, 6, bW, bH)];
+    NSMakeRect(3 + (bW + gap) * 2, 3, bW, bH)];
     [_repeatBtn setButtonType:NSPushOnPushOffButton]; // toggleable
     [_repeatBtn setBordered:YES];
     [_repeatBtn     setTitle:@"↺"];
@@ -480,18 +509,21 @@
 
 - (void)_buildStatusBar
 {
-    _statusBar = [[NSTextField alloc] initWithFrame:NSZeroRect];
+    _statusBar = [[StatusBarView alloc] initWithFrame:NSZeroRect];
+
+    _statusLabel = [[NSTextField alloc] initWithFrame:NSZeroRect];
     StatusBarCell *cell = [[StatusBarCell alloc] initTextCell:@""];
-    [_statusBar setCell:cell];
+    [_statusLabel setCell:cell];
     [cell release];
-    [_statusBar setBezeled:NO];
-    [_statusBar setDrawsBackground:YES];
-    [_statusBar setBackgroundColor:
-        [NSColor colorWithCalibratedWhite:0.85 alpha:1.0]];
-    [_statusBar setEditable:NO]; [_statusBar setSelectable:NO];
-    [_statusBar setAlignment:NSTextAlignmentCenter];
-    [[_statusBar cell] setFont:[NSFont systemFontOfSize:11]];
-    [_statusBar setStringValue:@"0 songs"];
+    [_statusLabel setBezeled:NO];
+    [_statusLabel setDrawsBackground:NO];
+    [_statusLabel setEditable:NO]; [_statusLabel setSelectable:NO];
+    [_statusLabel setAlignment:NSTextAlignmentCenter];
+    [_statusLabel setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
+    [[_statusLabel cell] setFont:[NSFont boldSystemFontOfSize:11]];
+    [_statusLabel setStringValue:@"0 songs"];
+    [_statusBar addSubview:_statusLabel];
+    [_statusLabel release];
 }
 
 - (void)_buildSidebar
@@ -680,7 +712,7 @@
 {
     [_currentSection release]; _currentSection = [section retain];
     [self _reloadTrackListForSection:section genre:nil artist:nil album:nil];
-    [_browserCtrl reload];
+    [_browserCtrl reloadWithTracks:[_trackCtrl tracks]];
 }
 
 - (void)sidebarRenamedPlaylist:(NSString *)oldName to:(NSString *)newName
@@ -956,9 +988,9 @@
 
 - (void)_libraryChanged:(NSNotification *)note
 {
-    [_browserCtrl reload];
     [self _reloadTrackListForSection:_currentSection
                                genre:nil artist:nil album:nil];
+    [_browserCtrl reloadWithTracks:[_trackCtrl tracks]];
     [_sidebarCtrl reload];
 }
 
@@ -975,7 +1007,7 @@
     NSUInteger h = (NSUInteger)(totalSecs / 3600);
     NSUInteger m = (NSUInteger)((totalSecs - h * 3600) / 60);
     double mb = totalBytes / (1024.0 * 1024.0);
-    [_statusBar setStringValue:[NSString stringWithFormat:
+    [_statusLabel setStringValue:[NSString stringWithFormat:
         @"%lu songs, %lu.%lu hours, %.1f MB",
         (unsigned long)n, (unsigned long)h, (unsigned long)m, mb]];
 }

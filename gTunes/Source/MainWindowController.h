@@ -42,7 +42,8 @@
     TrackListController        *_trackCtrl;
 
     // ── Status bar ──
-    NSTextField                *_statusBar;
+    NSView                     *_statusBar;
+    NSTextField                *_statusLabel;
     NSButton                   *_newPlaylistBtn;
     NSButton                   *_shuffleBtn;
     NSButton                   *_repeatBtn;
