@@ -441,20 +441,22 @@
     [content addSubview:_statusBar];
 
     // ── Main horizontal split: sidebar (200px) | content ──
+    static const CGFloat kStatusBarH = 32.0;
     CGFloat splitTop = ch - 62;
-    CGFloat splitH   = splitTop - 24;
+    CGFloat splitH   = splitTop - kStatusBarH;
     _mainSplit = [[NSSplitView alloc]
-        initWithFrame:NSMakeRect(0, 24, cw, splitH)];
+        initWithFrame:NSMakeRect(0, kStatusBarH, cw, splitH)];
     [_mainSplit setDividerStyle:NSSplitViewDividerStyleThin];
     [_mainSplit setVertical:YES];
     [_mainSplit setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
+    [_mainSplit setDelegate:self];
 
     // Sidebar
     [self _buildSidebar];
     static const CGFloat kArtH = 180.0;
     NSRect sideRect = NSMakeRect(0, 0, 180, splitH);
     [_sidebarContainer setFrame:sideRect];
-    [_sidebarArtView   setFrame:NSMakeRect(2, 0, 180, kArtH)];
+    [_sidebarArtView   setFrame:NSMakeRect(0, 0, 180, kArtH)];
     [_sidebarScroll    setFrame:NSMakeRect(0, kArtH, 180, splitH - kArtH)];
     [_mainSplit addSubview:_sidebarContainer];
 
@@ -697,6 +699,15 @@
 }
 
 // ──────────── Delegates ────────────
+
+- (CGFloat)splitView:(NSSplitView *)splitView
+    constrainMinCoordinate:(CGFloat)proposed
+             ofSubviewAt:(NSInteger)dividerIndex
+{
+    if (splitView == _mainSplit && dividerIndex == 0)
+        return MAX(proposed, 150.0);
+    return proposed;
+}
 
 - (void)splitViewDidResizeSubviews:(NSNotification *)notification
 {
